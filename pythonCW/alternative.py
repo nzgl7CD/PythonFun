@@ -37,34 +37,24 @@ class PortfolioBackend:
     
     def calculate_intermediate_quantities(self, target_return):
         u = np.ones(self.n)
-        # A = []
-        # for j in range(len(self.ds.drop(columns=['Date']).columns)):
-        #     temp=[]
-        #     for i in range(len(self.ds.drop(columns=['Date']).columns)):
-        #         temp.append(u[i] * self.returns[j]*self.inv_cov_matrix[j,i])
-        #     A.append(sum(temp))
-        
-        A = np.array([np.sum([u[i] * self.returns[j] * self.inv_cov_matrix[i, j] for i in range(self.n)]) for j in range(self.n)])
-        B = np.array([np.sum([self.returns[i] * self.returns[j] * self.inv_cov_matrix[i, j] for i in range(self.n)]) for j in range(self.n)])
-        C = np.array([np.sum([u[i] * u[j] * self.inv_cov_matrix[i, j] for i in range(self.n)]) for j in range(self.n)])
-        M = np.array([np.sum([self.returns[i] * u[j] * self.inv_cov_matrix[i, j] for i in range(self.n)]) for j in range(self.n)])
-        L = np.array([np.sum([self.returns[i] * self.returns[j] * self.inv_cov_matrix[i, j] for i in range(self.n)]) for j in range(self.n)])
-        
-        D = (B * C) - A**2
-        
-        G = (M * B - L * A) / D
-        H = (L * C - M * A) / D
-        G_plus_H=G+H
-        
-        # def rescale_weights(weights):
-        #     if weights is not None:
-        #         weights /= np.sum(weights)
-        #         weights = np.clip(weights, 0, 1)
-        #         return weights
-        #     pass
-        
-        weights = G + H * target_return
-        # weights=rescale_weights(weights)
+        inv_cov_matrix = self.inv_cov_matrix
+        A = np.sum([np.sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
+        B = np.sum([np.sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
+        C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
+        M = np.dot(np.ones(self.n), self.inv_cov_matrix)
+        L = self.returns @ inv_cov_matrix
+        D = B * C - A ** 2
+        LA = np.dot(L, A)  # Vector L multiplied by matrix A
+        MB = np.dot(M, B)  # Vector M multiplied by matrix B
+        # Calculate G
+        G = (1/D) * (MB - LA)
+        LB = L * C  # Vector L multiplied by matrix B
+        MA = M * A  # Vector M multiplied by matrix A
+        # Calculate H
+        H = (LB - MA) / D
+        # H = (L * B - M * A) / D
+        # return A, B, C, D, G, H
+        weights=G+H*target_return
         return weights
     
     def efficient_frontier(self):

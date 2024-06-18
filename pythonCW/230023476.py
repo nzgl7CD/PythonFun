@@ -29,12 +29,9 @@ class PortfolioBackend:
         C = np.array([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
         M = np.array([np.sum(self.returns[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
         L = np.array([np.sum(self.returns[i] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
-
         D = B * C - A ** 2
-
         G = (M * C - L * A) / D
         H = (L * B - M * A) / D
-
         return G, H
 
     def calculate_portfolio_metrics(self, weights):
