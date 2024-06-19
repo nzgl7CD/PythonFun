@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=0.3, risk_free_rate=0.02, n=2, risk_aversion=3):
+    def __init__(self, expected_return=0.5, risk_free_rate=0.02, n=7, risk_aversion=3):
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.n = n
@@ -79,7 +79,7 @@ class PortfolioOptimizer:
             weights = min_var_weights + (opt_var_weights - min_var_weights) * target_return
             frontier_weights.append(weights)
         
-        frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights] #not beneficial! Need to sort out risk and return 
+        frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights] #not beneficial! Need to sort out risk and return
         return frontier_weights, frontier_metrics
     
     def plot_efficient_frontier(self):
