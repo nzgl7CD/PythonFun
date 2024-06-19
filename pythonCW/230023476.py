@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=0.7, risk_free_rate=0.02, n=2, risk_aversion=3):
+    def __init__(self, expected_return=0.5, risk_free_rate=0.02, n=2, risk_aversion=3):
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.n = n
@@ -19,7 +19,7 @@ class PortfolioOptimizer:
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
     
     def get_data(self, n):
-        ds = pd.read_excel('test.xlsx', sheet_name='input')
+        ds = pd.read_excel('test.xlsx')
         ds['Date'] = pd.to_datetime(ds['Date'])
         ds.iloc[:, 1:] = ds.iloc[:, 1:].pct_change()
         return ds.iloc[:, :n + 1].dropna()
@@ -69,34 +69,33 @@ class PortfolioOptimizer:
     
     def calculate_minimum_variance_portfolio(self):
         A, _, C, _, _, _ = self.calculate_intermediate_quantities()
-        min_var_return = A / C
+        # min_var_return = A / C
         min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.n)) / C
         return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
     
     def calculate_optimum_variance_portfolio(self, target_return):
         _, _, _, _, G, H = self.calculate_intermediate_quantities()
-        weights = G + target_return * H
+        weights = G+(target_return*H)
         return weights, self.calculate_portfolio_metrics(weights)
     
     def calculate_mean_variance_efficient_frontier(self):
         min_var_weights, _ = self.calculate_minimum_variance_portfolio()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(0.07)
-            weights = min_var_weights + (opt_var_weights - min_var_weights) * target_return
+            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(target_return)
+            weights = (1 - target_return) * min_var_weights + target_return * opt_var_weights
             frontier_weights.append(weights)
-        
-        frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights] #not beneficial! Need to sort out risk and return
+        frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
         return frontier_weights, frontier_metrics
     
     def plot_efficient_frontier(self):
-        frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
-        frontier_risks = [metric[1] for metric in frontier_metrics]  # Extracting risks
-        frontier_returns = [metric[0] for metric in frontier_metrics]  # Extracting returns
+        _, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
+        frontier_risks = [metric[1] for metric in frontier_metrics]
+        frontier_returns = [metric[0] for metric in frontier_metrics]
 
-        min_var_weights, min_var_metrics = self.calculate_minimum_variance_portfolio()
-        opt_var_weights, opt_var_metrics = self.calculate_optimum_variance_portfolio(self.expected_return)
-        
+        min_var_weights, _ = self.calculate_minimum_variance_portfolio()
+        opt_var_weights, _ = self.calculate_optimum_variance_portfolio(self.expected_return)
+
         min_var_point = self.calculate_portfolio_metrics(min_var_weights)
         opt_var_point = self.calculate_portfolio_metrics(opt_var_weights)
 
@@ -104,8 +103,8 @@ class PortfolioOptimizer:
         plt.scatter(frontier_risks, frontier_returns, marker='o', color='b', label='Efficient Frontier')
         plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label='Minimum Variance Portfolio')
         plt.plot(opt_var_point[1], opt_var_point[0], marker='o', color='r', markersize=10, label='Optimum Variance Portfolio')
-        
-        plt.title('Efficient Frontier')
+
+        plt.title('Mean-Variance Efficient Frontier')
         plt.xlabel('Portfolio Volatility (Risk)')
         plt.ylabel('Portfolio Return')
         plt.grid(True)
@@ -191,7 +190,7 @@ class PortfolioFrontend:
     def run_optimizer(self):
         try:
             # Fixed parameters
-            expected_return = 0.07
+            expected_return = 0.5
             risk_free_rate = 0.02
             size = 2
             risk_aversion = 3
@@ -207,7 +206,7 @@ class PortfolioFrontend:
             
             # Plot efficient frontier and write to Excel
             optimizer.plot_efficient_frontier()
-            optimizer.write_to_excel('output.xlsx')
+            optimizer.write_to_excel('test.xlsx')
 
             messagebox.showinfo("Optimizer", "Optimization complete!")
         
