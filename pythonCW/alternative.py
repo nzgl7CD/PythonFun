@@ -103,11 +103,8 @@ class PortfolioBackend:
         plt.ylabel('Portfolio Return')
         plt.grid(True)
         plt.show()
-
     def write_to_excel(self, output_file='test.xlsx'):
-        
         rets, risks, utils, shrations = self.efficient_frontier()
-        
         df = pd.DataFrame({
             'Return': rets,
             'Volatility': risks,
@@ -119,10 +116,6 @@ class PortfolioBackend:
         
         with pd.ExcelWriter(output_file, mode='a', engine="openpyxl",if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name='output', index=False)
-        
-
-
-
 class PortfolioFrontend:
     def __init__(self, root):
         self.root = root

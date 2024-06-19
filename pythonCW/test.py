@@ -3,17 +3,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=0.5, risk_free_rate=0.02, n=7, risk_aversion=3):
+    def __init__(self, expected_return=0.5, risk_free_rate=0.02, n=2, risk_aversion=3):
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.n = n
         self.risk_aversion = risk_aversion
         self.ds = self.get_data(n)
-        self.returns = self.calculate_annualized_returns() 
-        # self.returns=[0.1934,0.1575] 
+        # self.returns = self.calculate_annualized_returns() 
+        self.returns=[0.1934,0.1575] 
         self.returns=np.asarray(self.returns)
-        self.cov_matrix = self.compute_covariance_matrix()
-        # self.cov_matrix=pd.DataFrame(data=[[0.09150625,0.023186625],[0.023186625,0.047961]])
+        # self.cov_matrix = self.compute_covariance_matrix()
+        self.cov_matrix=pd.DataFrame(data=[[0.09150625,0.023186625],[0.023186625,0.047961]])
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
     
     def get_data(self, n):
@@ -27,10 +27,13 @@ class PortfolioOptimizer:
         compounded_returns = (returns + 1).prod() ** (12 / len(returns)) - 1
         return compounded_returns.values
     
+    # Checked: Values are correct inversed
+    
     def compute_covariance_matrix(self):
         cov_matrix = self.ds.drop(columns=['Date']).cov() * 12
         return cov_matrix
     
+    # Checked: All values are correct according to the example
     def calculate_intermediate_quantities(self):
         u = np.ones(self.n)
         inv_cov_matrix = self.inv_cov_matrix
@@ -51,7 +54,9 @@ class PortfolioOptimizer:
 
         # Calculate H
         H = (LB - MA) / D
-        # H = (L * B - M * A) / D
+        # print(G)
+        # print(H)
+        # print(G+H)
         return A, B, C, D, G, H
 
     def calculate_portfolio_metrics(self, weights):
@@ -75,7 +80,7 @@ class PortfolioOptimizer:
         min_var_weights, _ = self.calculate_minimum_variance_portfolio()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(target_return)
+            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(0.07)
             weights = min_var_weights + (opt_var_weights - min_var_weights) * target_return
             frontier_weights.append(weights)
         
@@ -106,23 +111,39 @@ class PortfolioOptimizer:
         plt.show()
         
     def write_to_excel(self, output_file='test.xlsx'):
-        
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
-        
-        
-        df = pd.DataFrame({
-            'Return':0,
-            'Volatility':0,
-            'Utility':0,
-            'Sharpe Ratio':0
-        })
-        
+
+        weight_columns = [f'{col}_w' for col in self.ds.columns[1:]]
+        data = {
+            'Return': [metric[0] for metric in frontier_metrics],
+            'Volatility': [metric[1] for metric in frontier_metrics],
+            'Utility': [self.calculate_quadratic_utility(w) for w in frontier_weights],
+            'Sharpe Ratio': [self.calculate_sharpe_ratio(w) for w in frontier_weights]
+        }
+
+        for i, col in enumerate(weight_columns):
+            data[col] = [w[i] for w in frontier_weights]
+
+        df = pd.DataFrame(data)
         df.sort_values(by='Return', inplace=True)
-        
+        numeric_columns = ['Return', 'Volatility', 'Utility', 'Sharpe Ratio'] + weight_columns
+        df[numeric_columns] = df[numeric_columns].round(4)
         with pd.ExcelWriter(output_file, mode='a', engine="openpyxl",if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name='output', index=False)
+
+    
+    def calculate_quadratic_utility(self, weights):
+        portfolio_return, portfolio_risk = self.calculate_portfolio_metrics(weights)
+        utility = portfolio_return - 0.5 * self.risk_aversion * portfolio_risk**2
+        return utility
+
+    def calculate_sharpe_ratio(self, weights):
+        portfolio_return, portfolio_risk = self.calculate_portfolio_metrics(weights)
+        excess_return = portfolio_return - self.risk_free_rate
+        sharpe_ratio = excess_return / portfolio_risk
+        return sharpe_ratio
 
 # Example usage:
 if __name__ == "__main__":
     optimizer = PortfolioOptimizer()
-    optimizer.plot_efficient_frontier()
+    optimizer.write_to_excel()
