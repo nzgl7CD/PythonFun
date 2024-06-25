@@ -3,14 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import ttk, messagebox
-
 class PortfolioOptimizer:
-    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate, portfolio_size, risk_aversion):
+    def __init__(self, expected_return=[], volatility=[], corr_matrix=[[],[]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
         
         """
         Initialize the PortfolioOptimizer instance.
@@ -202,8 +196,7 @@ class PortfolioOptimizer:
         max_utility_value = df.loc[max_utility_idx, 'Utility']
         print(f"Maximum Utility Portfolio:")
         print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
-        print()
-        print()      
+        print('\n' * 2)     
     
 
         

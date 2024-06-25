@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate, portfolio_size, risk_aversion):
+    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
         
         """
         Initialize the PortfolioOptimizer instance.
@@ -50,13 +50,10 @@ class PortfolioOptimizer:
         compounded_returns = (returns + 1).prod() ** (12 / len(returns)) - 1
         return compounded_returns.values
 
-    # Checked: Values are correct inversed
-
     def compute_covariance_matrix(self):
         cov_matrix = self.ds.drop(columns=['Date']).cov() * 12
         return cov_matrix
 
-    # Checked: All values are correct according to the example
     def calculate_intermediate_quantities(self):
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
@@ -75,9 +72,9 @@ class PortfolioOptimizer:
 
         # Calculate H
         H = (LB - MA) / D
+        
         return A, B, C, D, G, H
     
-    # Gives correct calculation
     def calculate_portfolio_metrics(self, weights):
         portfolio_return = np.sum(weights * self.returns)
         portfolio_variance = np.dot(weights.T, np.dot(self.cov_matrix, weights))
@@ -87,13 +84,11 @@ class PortfolioOptimizer:
         utility = portfolio_return - 0.5 * self.risk_aversion * portfolio_variance
         return portfolio_return, portfolio_risk, sharpe_ratio, utility
 
-    # Gives correct calculation
     def calculate_minimum_variance_portfolio(self):
         _, _, C, _, _, _ = self.calculate_intermediate_quantities()
         min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / C
         return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
 
-    # Gives correct calculation
     def calculate_optimum_variance_portfolio(self, target_return):
         _, _, _, _, G, H = self.calculate_intermediate_quantities()
         weights = G+(target_return*H)
@@ -121,6 +116,7 @@ class PortfolioOptimizer:
         max_sharpe_idx = np.argmax(sharpe_ratios)
         max_sharpe_point = frontier_metrics[max_sharpe_idx]
         
+        # Plots efficient frontier and puts opt and min portfolio as dots
         plt.figure(figsize=(10, 6))
         plt.scatter(frontier_risks, frontier_returns, marker='o', color='b', label='Efficient Frontier')
         plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label='Minimum Variance Portfolio')
@@ -159,7 +155,6 @@ class PortfolioOptimizer:
         numeric_columns = ['Return', 'Volatility', 'Utility', 'Sharpe Ratio'] + weight_columns
         df[numeric_columns] = df[numeric_columns].round(4)
         
-        
         with pd.ExcelWriter(output_file, mode='a', engine="openpyxl",if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name='output', index=False)
             workbook = writer.book
@@ -176,8 +171,7 @@ class PortfolioOptimizer:
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width
                 worksheet.column_dimensions[column].width = adjusted_width
             
-        print()
-        print()
+        print('\n' * 2)
         
         # Print maximum Sharpe Ratio
         max_sharpe_idx = df['Sharpe Ratio'].idxmax()
@@ -187,8 +181,7 @@ class PortfolioOptimizer:
         
         print(f"Maximum Sharpe Ratio Portfolio:")
         print(f"Return: {max_sharpe_return:.4f}, Volatility: {max_sharpe_volatility:.4f}, Sharpe Ratio: {max_sharpe_value:.4f}")
-        print()
-        print()
+        print('\n' * 2)
         
         # Print maximum Utility
         max_utility_idx = df['Utility'].idxmax()
@@ -197,8 +190,7 @@ class PortfolioOptimizer:
         max_utility_value = df.loc[max_utility_idx, 'Utility']
         print(f"Maximum Utility Portfolio:")
         print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
-        print()
-        print()      
+        print('\n' * 2)     
     
 class PortfolioFrontend:
     def __init__(self, root):
