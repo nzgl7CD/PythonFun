@@ -3,31 +3,49 @@ import numpy as np
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import ttk, messagebox
+
 class PortfolioOptimizer:
-    def __init__(self, expected_return=[0.1934,0.1575], volatility=[0.3025,0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, n=2, risk_aversion=3):
+    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate, portfolio_size, risk_aversion):
+        
+        """
+        Initialize the PortfolioOptimizer instance.
+
+        Parameters:
+        - expected_return: list/array of expected returns for each security
+        - volatility: list/array of volatilities for each security
+        - corr_matrix: correlation matrix between securities
+        - risk_free_rate: risk-free rate
+        - n: number of securities
+        - risk_aversion: risk aversion parameter for utility calculation
+        """
+        
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
-        self.n = n
+        self.portfolio_size = portfolio_size
         self.risk_aversion = risk_aversion
-        print(len(corr_matrix))
         if (self.is_effectively_empty(expected_return) and self.is_effectively_empty(volatility) and self.is_effectively_empty(corr_matrix)):
             self.returns=np.asarray(expected_return)
             corr_matrix = np.array(corr_matrix)
             stdv = np.array(volatility)
             self.cov_matrix = np.outer(stdv, stdv) * corr_matrix
         else:
-            self.ds = self.get_data(n)
+            self.ds = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
             self.cov_matrix = self.compute_covariance_matrix()
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
         
     def is_effectively_empty(self,lst):
-        if lst and len(lst)==self.n:
+        if lst and len(lst)==self.portfolio_size:
             return True
         return False
 
     def get_data(self, n):
-        ds = pd.read_excel('test.xlsx')
+        ds = pd.read_excel('230023476PortfolioProblem.xlsx')
         ds['Date'] = pd.to_datetime(ds['Date'])
         ds.iloc[:, 1:] = ds.iloc[:, 1:].pct_change()
         return ds.iloc[:, :n + 1].dropna()
@@ -45,26 +63,23 @@ class PortfolioOptimizer:
 
     # Checked: All values are correct according to the example
     def calculate_intermediate_quantities(self):
-        u = np.ones(self.n)
+        u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
-        A = np.sum([np.sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
-        B = np.sum([np.sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
-        C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.n)) for j in range(self.n)])
-        M = np.dot(np.ones(self.n), self.inv_cov_matrix)
+        A = np.sum([np.sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        B = np.sum([np.sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        M = np.dot(np.ones(self.portfolio_size), self.inv_cov_matrix)
         L = self.returns @ inv_cov_matrix
         D = B * C - A ** 2
         LA = np.dot(L, A)  # Vector L multiplied by matrix A
         MB = np.dot(M, B)  # Vector M multiplied by matrix B
-
         # Calculate G
         G = (1/D) * (MB - LA)
-
         LB = L * C  # Vector L multiplied by matrix B
         MA = M * A  # Vector M multiplied by matrix A
 
         # Calculate H
         H = (LB - MA) / D
-        optim=(A/C)-(D/C**2)/(self.risk_free_rate-A/C)
         return A, B, C, D, G, H
     
     # Gives correct calculation
@@ -80,7 +95,7 @@ class PortfolioOptimizer:
     # Gives correct calculation
     def calculate_minimum_variance_portfolio(self):
         _, _, C, _, _, _ = self.calculate_intermediate_quantities()
-        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.n)) / C
+        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / C
         return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
 
     # Gives correct calculation
@@ -128,12 +143,12 @@ class PortfolioOptimizer:
         plt.xlim(0.0, max(frontier_risks))
         plt.show()
 
-    def write_to_excel(self, output_file='test.xlsx'):
+    def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         if hasattr(self, 'ds'):
             weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
         else:
-            weight_columns = [f'w{i+1}' for i in range(self.n)]
+            weight_columns = [f'w{i+1}' for i in range(self.portfolio_size)]
         data = {
             'Return': [metric[0] for metric in frontier_metrics],
             'Volatility': [metric[1] for metric in frontier_metrics],
@@ -188,20 +203,12 @@ class PortfolioOptimizer:
         print(f"Maximum Utility Portfolio:")
         print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
         print()
-        print()
+        print()      
+    
+
         
     
 if __name__ == "__main__":
     optimizer = PortfolioOptimizer()
     optimizer.write_to_excel()
     optimizer.plot_efficient_frontier()
-
-# Remaining:
-#     - compute G, H, G+H
-#     - print max sharpe ratio, max utility
-#     - allow correct inputs from GUI
-#     - should we use correlations and calculate covariance with stdv or is okay with directly generating covariance?
-#     -add max utility and sharpe ratio to plot
-#     -they must be designed using good cohesion and coupling programming principles.
-#     -print on the screen
-#    
