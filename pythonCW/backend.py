@@ -17,7 +17,6 @@ class PortfolioOptimizer:
         - n: number of securities
         - risk_aversion: risk aversion parameter for utility calculation
         """
-        
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.portfolio_size = portfolio_size
@@ -30,7 +29,8 @@ class PortfolioOptimizer:
         else:
             self.ds = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
-            self.cov_matrix = self.compute_covariance_matrix()
+            self.cov_matrix = self.compute_covariance_matrix(self.ds)
+            
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
         
     def is_effectively_empty(self,lst):
@@ -45,17 +45,15 @@ class PortfolioOptimizer:
         return ds.iloc[:, :n + 1].dropna()
 
     def calculate_annualized_returns(self):
-        returns = self.ds.iloc[:, 1:]
+        returns = self.ds.iloc[:, 1:] # Exclude dates
         compounded_returns = (returns + 1).prod() ** (12 / len(returns)) - 1
         return compounded_returns.values
 
-    # Checked: Values are correct inversed
-
-    def compute_covariance_matrix(self):
-        cov_matrix = self.ds.drop(columns=['Date']).cov() * 12
+    def compute_covariance_matrix(self, dataset):
+        cov_matrix = dataset.drop(columns=['Date']).cov() * 12
         return cov_matrix
 
-    # Checked: All values are correct according to the example
+    # Should we put them in safe as they are calculated once?
     def calculate_intermediate_quantities(self):
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
@@ -67,13 +65,16 @@ class PortfolioOptimizer:
         D = B * C - A ** 2
         LA = np.dot(L, A)  # Vector L multiplied by matrix A
         MB = np.dot(M, B)  # Vector M multiplied by matrix B
+        
         # Calculate G
         G = (1/D) * (MB - LA)
+        
         LB = L * C  # Vector L multiplied by matrix B
         MA = M * A  # Vector M multiplied by matrix A
 
         # Calculate H
         H = (LB - MA) / D
+        
         return A, B, C, D, G, H
     
     # Gives correct calculation
@@ -102,39 +103,74 @@ class PortfolioOptimizer:
         min_var_weights, _ = self.calculate_minimum_variance_portfolio()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights, opt_metric = self.calculate_optimum_variance_portfolio(target_return)
+            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(target_return)
             weights = (1 - target_return) * min_var_weights + target_return * opt_var_weights
             frontier_weights.append(weights)
-            # if opt_metric[2]>self.optimal_portfolio_plot['Sharpe Ratio']:
-            #     self.optimal_portfolio_plot['Return'],self.optimal_portfolio_plot['Risk'],self.optimal_portfolio_plot['Sharpe Ratio']=opt_metric[0],opt_metric[1],opt_metric[2] 
         frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
         return frontier_weights, frontier_metrics
 
     def plot_efficient_frontier(self):
+        """
+        Plot the mean-variance efficient frontier along with the min variance point
+        and the max Sharpe ratio point.
+        """
+
+        # Data processing: Calculate the mean-variance efficient frontier
         _, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         frontier_risks = [metric[1] for metric in frontier_metrics]
         frontier_returns = [metric[0] for metric in frontier_metrics]
         sharpe_ratios = [metric[2] for metric in frontier_metrics]
+
+        # Find index of the lowest standard deviation (min variance point)
+        min_var_idx = np.argmin(frontier_risks)
+        min_var_point = frontier_metrics[min_var_idx]
         
-        _, min_var_point = self.calculate_minimum_variance_portfolio()
+        # Find index of the greatest Sharpe ratio (max Sharpe ratio point)
         max_sharpe_idx = np.argmax(sharpe_ratios)
         max_sharpe_point = frontier_metrics[max_sharpe_idx]
+
+        # Plotting the efficient frontier and key points
+        plt.figure(figsize=(12, 8))
+
+        # Efficient frontier
+        plt.plot(frontier_risks, frontier_returns, 'b-o', label='Efficient Frontier')
+
+        # plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
+        # plt.plot(max_sharpe_point[1], max_sharpe_point[0], marker='o', color='r', markersize=10, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
         
-        plt.figure(figsize=(10, 6))
-        plt.scatter(frontier_risks, frontier_returns, marker='o', color='b', label='Efficient Frontier')
-        plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label='Minimum Variance Portfolio')
-        plt.plot(max_sharpe_point[1], max_sharpe_point[0], marker='o', color='r', markersize=10, label='Maximum Sharpe Ratio Portfolio')
+        # Highlighting the min variance point
+        plt.scatter(min_var_point[1], min_var_point[0], color='green', marker='o', s=100, 
+                zorder=5, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
+    
+        # Highlighting the max Sharpe ratio point
+        plt.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
+                    zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
 
-        # Add labels for Sharpe Ratio and Minimum Variance Portfolio
-        plt.text(min_var_point[1], min_var_point[0], f'  Min Variance: {min_var_point[1]**2:.4f}', verticalalignment='bottom', horizontalalignment='right', color='green')
-        plt.text(max_sharpe_point[1], max_sharpe_point[0], f'  Max Sharpe Ratio: {max_sharpe_point[2]:.4f}', verticalalignment='bottom', horizontalalignment='right', color='red')
+        # Annotating the min variance point
+        plt.annotate(f'Min Variance\nStdv: {min_var_point[1]:.4f}', 
+                    xy=(min_var_point[1], min_var_point[0]), 
+                    xytext=(min_var_point[1] + 0.03, min_var_point[0] + 0.03),
+                    arrowprops=dict(facecolor='green', shrink=0.05),
+                    verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=10, fontweight='bold')
 
-        plt.title('Mean-Variance Efficient Frontier')
-        plt.xlabel('Portfolio Volatility (Risk)')
-        plt.ylabel('Portfolio Return')
-        plt.grid(True)
-        plt.legend()
+        # Annotating the max Sharpe ratio point
+        plt.annotate(f'Max Sharpe Ratio\nSharpe: {max_sharpe_point[2]:.4f}', 
+                    xy=(max_sharpe_point[1], max_sharpe_point[0]), 
+                    xytext=(max_sharpe_point[1] - 0.15, max_sharpe_point[0] + 0.03),
+                    arrowprops=dict(facecolor='red', shrink=0.05),
+                    verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=10, fontweight='bold')
+
+        # Additional plot settings for aesthetics
+        plt.xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
+        plt.ylabel('Portfolio Return', fontsize=12, fontweight='bold')
+        plt.title('Mean-Variance Efficient Frontier', fontsize=14, fontweight='bold')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.legend(fontsize=10)
+        plt.axhline(0, color='black', linewidth=0.5, linestyle='--')
+        plt.axvline(0, color='black', linewidth=0.5, linestyle='--')
         plt.xlim(0.0, max(frontier_risks))
+
+        # Show the plot
         plt.show()
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
@@ -163,6 +199,9 @@ class PortfolioOptimizer:
             df.to_excel(writer, sheet_name='output', index=False)
             workbook = writer.book
             worksheet = workbook['output']
+            
+            # Regular nested for loop as requested
+            
             for column_cells in worksheet.columns:
                 max_length = 0
                 column = column_cells[0].column_letter  # Get the column name
@@ -174,34 +213,48 @@ class PortfolioOptimizer:
                         pass
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width
                 worksheet.column_dimensions[column].width = adjusted_width
-            
-        print()
-        print()
         
-        # Print maximum Sharpe Ratio
-        max_sharpe_idx = df['Sharpe Ratio'].idxmax()
-        max_sharpe_return = df.loc[max_sharpe_idx, 'Return']
-        max_sharpe_volatility = df.loc[max_sharpe_idx, 'Volatility']
-        max_sharpe_value = df.loc[max_sharpe_idx, 'Sharpe Ratio']
-        
-        print(f"Maximum Sharpe Ratio Portfolio:")
-        print(f"Return: {max_sharpe_return:.4f}, Volatility: {max_sharpe_volatility:.4f}, Sharpe Ratio: {max_sharpe_value:.4f}")
-        print()
-        print()
-        
-        # Print maximum Utility
-        max_utility_idx = df['Utility'].idxmax()
-        max_utility_return = df.loc[max_utility_idx, 'Return']
-        max_utility_volatility = df.loc[max_utility_idx, 'Volatility']
-        max_utility_value = df.loc[max_utility_idx, 'Utility']
-        print(f"Maximum Utility Portfolio:")
-        print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
-        print('\n' * 2)     
+        return df
     
+    def print_values(self, df):
+            #Might be beneficial to do these prints prior to the rounding with 4 decimals
+            
+            # Print maximum Sharpe Ratio
+            max_sharpe_idx = df['Sharpe Ratio'].idxmax()
+            max_sharpe_return = df.loc[max_sharpe_idx, 'Return']
+            max_sharpe_volatility = df.loc[max_sharpe_idx, 'Volatility']
+            max_sharpe_value = df.loc[max_sharpe_idx, 'Sharpe Ratio']
+            
+            print(f"Maximum Sharpe Ratio Portfolio:")
+            print(f"Return: {max_sharpe_return:.4f}, Volatility: {max_sharpe_volatility:.4f}, Sharpe Ratio: {max_sharpe_value:.4f}")
+            
+            print('\n' * 2)
+            
+            # Print maximum Utility
+            max_utility_idx = df['Utility'].idxmax()
+            max_utility_return = df.loc[max_utility_idx, 'Return']
+            max_utility_volatility = df.loc[max_utility_idx, 'Volatility']
+            max_utility_value = df.loc[max_utility_idx, 'Utility']
+            print(f"Maximum Utility Portfolio:")
+            print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
+            
+            print('\n' * 2)    
+             
+            # Print minimum volatility
+            min_volatility_idx = df['Volatility'].idxmin()
+            min_volatility_return = df.loc[min_volatility_idx, 'Return']
+            min_volatility_volatility = df.loc[min_volatility_idx, 'Volatility']
+            
+            print(f"Minimum Volatility Portfolio:")
+            print(f"Return: {min_volatility_return:.4f}, Volatility: {min_volatility_volatility:.4f}")
 
-        
+            print('\n' * 2) 
+
+def main():
+    optimizer = PortfolioOptimizer()
+    optimizer.plot_efficient_frontier()
+    dataframe=optimizer.write_to_excel()
+    optimizer.print_values(dataframe)
     
 if __name__ == "__main__":
-    optimizer = PortfolioOptimizer()
-    optimizer.write_to_excel()
-    optimizer.plot_efficient_frontier()
+    main()

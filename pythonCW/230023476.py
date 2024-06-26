@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
+    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate: float, portfolio_size:int, risk_aversion: float):
         
         """
         Initialize the PortfolioOptimizer instance.
@@ -294,14 +294,17 @@ class PortfolioFrontend:
 
             if not (len(volatilities) == portfolio_size and len(expected_returns) == portfolio_size and len(correlation_matrix) == portfolio_size):
                 messagebox.showinfo("Optimizer", "Inputs invalid. Using real data from Excel file.")
+                
                 # Load real data from Excel file
-                optimizer = PortfolioOptimizer(expected_return=[],  # Placeholder for expected return
-                                            volatility=[],     # Placeholder for volatility
-                                            corr_matrix=[],    # Placeholder for correlation matrix
+                optimizer = PortfolioOptimizer(expected_return=[],  
+                                            volatility=[],     
+                                            corr_matrix=[],    
                                             risk_free_rate=risk_free_rate,
                                             portfolio_size=portfolio_size,
                                             risk_aversion=risk_aversion)
             else:
+                
+                # Load input data from user
                 optimizer = PortfolioOptimizer(expected_return=expected_returns,
                                             volatility=volatilities,
                                             corr_matrix=correlation_matrix,
