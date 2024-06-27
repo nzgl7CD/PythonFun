@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import ttk, messagebox
-
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class PortfolioOptimizer:
     def __init__(self, expected_return=[], volatility=[], corr_matrix=[[],[]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
         
@@ -23,7 +23,7 @@ class PortfolioOptimizer:
         self.portfolio_size = portfolio_size
         self.risk_aversion = risk_aversion
         self.dataframe=None
-        if (self.is_effectively_empty(expected_return) and self.is_effectively_empty(volatility) and self.is_effectively_empty(corr_matrix)):
+        if self.is_effectively_empty(expected_return, volatility,corr_matrix):
             self.returns=np.asarray(expected_return)
             corr_matrix = np.array(corr_matrix)
             stdv = np.array(volatility)
@@ -35,8 +35,8 @@ class PortfolioOptimizer:
             
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
         
-    def is_effectively_empty(self,lst):
-        if lst and len(lst)==self.portfolio_size:
+    def is_effectively_empty(self,expected_return,volatility,corr_matrix):
+        if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
             return True
         return False
 
@@ -111,7 +111,7 @@ class PortfolioOptimizer:
         frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
         return frontier_weights, frontier_metrics
 
-    def plot_efficient_frontier(self):
+    def plot_efficient_frontier(self, ax):
         """
         Plot the mean-variance efficient frontier along with the min variance point
         and the max Sharpe ratio point.
@@ -132,48 +132,42 @@ class PortfolioOptimizer:
         max_sharpe_point = frontier_metrics[max_sharpe_idx]
 
         # Plotting the efficient frontier and key points
-        plt.figure(figsize=(12, 8))
+        # plt.figure(figsize=(12, 8))
 
         # Efficient frontier
-        plt.plot(frontier_risks, frontier_returns, 'b-o', label='Efficient Frontier')
+        ax.plot(frontier_risks, frontier_returns, 'b-o', label='Efficient Frontier')
 
-        # plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
-        # plt.plot(max_sharpe_point[1], max_sharpe_point[0], marker='o', color='r', markersize=10, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
-        
         # Highlighting the min variance point
-        plt.scatter(min_var_point[1], min_var_point[0], color='green', marker='o', s=100, 
+        ax.scatter(min_var_point[1], min_var_point[0], color='green', marker='o', s=100, 
                 zorder=5, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
-    
+
         # Highlighting the max Sharpe ratio point
-        plt.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
-                    zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
+        ax.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
+                zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
 
         # Annotating the min variance point
-        plt.annotate(f'Min Variance\nStdv: {min_var_point[1]:.4f}', 
+        ax.annotate(f'Min Variance\nStdv: {min_var_point[1]:.4f}', 
                     xy=(min_var_point[1], min_var_point[0]), 
                     xytext=(min_var_point[1] + 0.03, min_var_point[0] + 0.03),
                     arrowprops=dict(facecolor='green', shrink=0.05),
                     verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=10, fontweight='bold')
 
         # Annotating the max Sharpe ratio point
-        plt.annotate(f'Max Sharpe Ratio\nSharpe: {max_sharpe_point[2]:.4f}', 
+        ax.annotate(f'Max Sharpe Ratio\nSharpe: {max_sharpe_point[2]:.4f}', 
                     xy=(max_sharpe_point[1], max_sharpe_point[0]), 
                     xytext=(max_sharpe_point[1] - 0.15, max_sharpe_point[0] + 0.03),
                     arrowprops=dict(facecolor='red', shrink=0.05),
                     verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=10, fontweight='bold')
 
         # Additional plot settings for aesthetics
-        plt.xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
-        plt.ylabel('Portfolio Return', fontsize=12, fontweight='bold')
-        plt.title('Mean-Variance Efficient Frontier', fontsize=14, fontweight='bold')
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.legend(fontsize=10)
-        plt.axhline(0, color='black', linewidth=0.5, linestyle='--')
-        plt.axvline(0, color='black', linewidth=0.5, linestyle='--')
-        plt.xlim(0.0, max(frontier_risks))
-
-        # Show the plot
-        plt.show()
+        ax.set_xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Portfolio Return', fontsize=12, fontweight='bold')
+        ax.set_title('Mean-Variance Efficient Frontier', fontsize=14, fontweight='bold')
+        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.legend(fontsize=10)
+        ax.axhline(0, color='black', linewidth=0.5, linestyle='--')
+        ax.axvline(0, color='black', linewidth=0.5, linestyle='--')
+        ax.set_xlim(0.0, max(frontier_risks))
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
@@ -243,6 +237,7 @@ class PortfolioFrontend:
         self.style.configure('TButton', font=('Helvetica', 12), padding=10, background='#4CAF50', foreground='#000000')  
         self.style.map('TButton', background=[('active', '#45a049')])
         self.create_widgets()
+        self.metrics_dict=None
 
     def create_widgets(self):
         
@@ -332,9 +327,6 @@ class PortfolioFrontend:
         try:
             portfolio_size = int(self.portfolio_size_entry.get())
             
-            if portfolio_size < 2 or portfolio_size > 12:
-                messagebox.showerror("Error", "Portfolio Size must be between 2 and 12.")
-                return
             
             # Get risk aversion and risk free rate, setting defaults if not provided
             risk_aversion_entry = self.risk_aversion_entry.get()
@@ -343,38 +335,75 @@ class PortfolioFrontend:
             risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
             risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
 
-            volatilities = self.parse_values(self.volatilities_text.get("1.0", tk.END))
-            expected_returns = self.parse_values(self.expected_returns_text.get("1.0", tk.END))
+            volatilities = self.parse_vectors(self.volatilities_text.get("1.0", tk.END))
+            expected_returns = self.parse_vectors(self.expected_returns_text.get("1.0", tk.END))
             correlation_matrix = self.parse_correlation_matrix(self.correlation_matrix_text.get("1.0", tk.END))
-
-            if not (len(volatilities) == portfolio_size and len(expected_returns) == portfolio_size and len(correlation_matrix) == portfolio_size):
-                messagebox.showinfo("Optimizer", "Inputs invalid. Using real data from Excel file.")
+            
+            def input_validation(volatilities, expected_returns, correlation_matrix):
                 
-                # Load real data from Excel file
-                optimizer = PortfolioOptimizer(expected_return=[],  
-                                            volatility=[],     
-                                            corr_matrix=[],    
-                                            risk_free_rate=risk_free_rate,
-                                            portfolio_size=portfolio_size,
-                                            risk_aversion=risk_aversion)
-            else:
-                # Load input data from user
-                optimizer = PortfolioOptimizer(expected_return=expected_returns,
-                                            volatility=volatilities,
-                                            corr_matrix=correlation_matrix,
-                                            risk_free_rate=risk_free_rate,
-                                            portfolio_size=portfolio_size,
-                                            risk_aversion=risk_aversion)
-
-            optimizer.plot_efficient_frontier()
+                if not (len(volatilities) == portfolio_size and len(expected_returns) == portfolio_size and len(correlation_matrix) == portfolio_size):
+                    messagebox.showinfo("Optimizer", "Inputs invalid. Using real data from Excel file.")
+                    
+                    # Load real data from Excel file
+                    optimizer = PortfolioOptimizer(expected_return=[],  
+                                                volatility=[],     
+                                                corr_matrix=[],    
+                                                risk_free_rate=risk_free_rate,
+                                                portfolio_size=portfolio_size,
+                                                risk_aversion=risk_aversion)
+                else:
+                    # Load input data from user
+                    optimizer = PortfolioOptimizer(expected_return=expected_returns,
+                                                volatility=volatilities,
+                                                corr_matrix=correlation_matrix,
+                                                risk_free_rate=risk_free_rate,
+                                                portfolio_size=portfolio_size,
+                                                risk_aversion=risk_aversion)
+                return optimizer
+            
+            optimizer=input_validation(volatilities, expected_returns, correlation_matrix)
+            
+            self.show_plot(optimizer)
             optimizer.write_to_excel('230023476PortfolioProblem.xlsx')
-            metrics_dict = optimizer.print_values()
-            self.show_portfolio_metrics(metrics_dict)
+            self.metrics_dict = optimizer.print_values()
 
         except ValueError as e:
             messagebox.showerror("Error", str(e))
     
-    
+    def show_plot(self, optimizer):
+        if hasattr(self, 'plot_window') and self.plot_window.winfo_exists():
+            self.plot_window.destroy()
+
+        # Create a new plot window
+        self.plot_window = tk.Toplevel(self.root)
+        self.plot_window.title("Efficient Frontier")
+        width, height = 800, 800
+        x = (self.plot_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.plot_window.winfo_screenheight() // 2) - (height // 2)
+        self.plot_window.geometry(f"{width}x{height}+{x}+{y}")
+
+        # Create a frame to hold the plot and the exit button
+        plot_frame = ttk.Frame(self.plot_window)
+        plot_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Create the figure and axes
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # Embed the plot in the Tkinter window
+        canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Call the backend plot function with the axes
+        optimizer.plot_efficient_frontier(ax)
+        
+        # To show the portfolio metrics when the plot is closed
+        def close_plot_and_show_metrics():
+            self.plot_window.destroy()
+            self.show_portfolio_metrics(self.metrics_dict)
+            
+        ttk.Button(plot_frame, text="Exit", command=close_plot_and_show_metrics).pack(side=tk.BOTTOM, pady=10)
+
 
     def show_portfolio_metrics(self, metrics_dict):
         top = tk.Toplevel(self.root)
@@ -383,12 +412,13 @@ class PortfolioFrontend:
         # Calculate and set the geometry of the dialog based on content size
         rows = len(metrics_dict) + 1  # Including header row
         cols = 5 
-        top.geometry(f"{cols * 150}x{rows * 50}")  
+        top.geometry(f"{cols * 150}x{rows * 70}")  
         
         formatted_str = ""
 
         try:
             formatted_str += "{:<25s}{:^15s}{:^15s}{:^15s}{:^15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
+            formatted_str += "-" * (25 + 1 + 15 + 1 + 15 + 1 + 15 + 1 + 15) + "\n"
             for key in metrics_dict:
                 formatted_str += "{:<25s}".format(key) 
                 return_value = metrics_dict[key][0]
@@ -400,13 +430,24 @@ class PortfolioFrontend:
         except Exception as e:
             formatted_str += f"Error occurred when formatting portfolio metrics: {e}\n"
 
-        ttk.Label(top, text=formatted_str, justify='left', font=('Courier', 10)).pack()
-        ttk.Button(top, text="Close", command=top.destroy).pack(pady=10)
+        frame = ttk.Frame(top, padding=10)
+        frame.pack(expand=True, fill='both')
+        
+        # Create a text widget with borders
+        text_widget = tk.Text(frame, wrap=tk.NONE)
+        text_widget.insert(tk.END, formatted_str)
+        text_widget.configure(state='disabled', font=('Courier', 10), relief=tk.SOLID, borderwidth=1)
+        text_widget.pack(expand=True, fill='both', padx=10, pady=10)
+
+        # Button to close the window
+        # ttk.Button(frame, text="Close", command=top.destroy).pack(pady=10)
+        
+        # Print to satisfy the assignment requirement
         print(f'\n{formatted_str}')
         
 
 
-    def parse_values(self, input_str):
+    def parse_vectors(self, input_str):
         try:
             values = list(map(float, input_str.strip().split(',')))
             return values

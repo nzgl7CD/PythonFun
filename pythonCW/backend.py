@@ -57,8 +57,8 @@ class PortfolioOptimizer:
     def calculate_intermediate_quantities(self):
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
-        A = np.sum([np.sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
-        B = np.sum([np.sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        A = sum([sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        B = sum([sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
         C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
         M = np.dot(np.ones(self.portfolio_size), self.inv_cov_matrix)
         L = self.returns @ inv_cov_matrix
