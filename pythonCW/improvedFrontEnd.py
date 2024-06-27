@@ -18,6 +18,7 @@ class PortfolioOptimizer:
         - n: number of securities
         - risk_aversion: risk aversion parameter for utility calculation
         """
+        
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.portfolio_size = portfolio_size
@@ -34,6 +35,7 @@ class PortfolioOptimizer:
             self.cov_matrix = self.compute_covariance_matrix(self.ds)
             
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
+        _, _, self.C, _, self.G, self.H=self.calculate_intermediate_quantities()
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
         if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
@@ -91,14 +93,12 @@ class PortfolioOptimizer:
 
     # Gives correct calculation
     def calculate_minimum_variance_portfolio(self):
-        _, _, C, _, _, _ = self.calculate_intermediate_quantities()
-        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / C
+        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / self.C
         return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
 
     # Gives correct calculation
     def calculate_optimum_variance_portfolio(self, target_return):
-        _, _, _, _, G, H = self.calculate_intermediate_quantities()
-        weights = G+(target_return*H)
+        weights = self.G+(target_return*self.H)
         return weights, self.calculate_portfolio_metrics(weights)
 
     def calculate_mean_variance_efficient_frontier(self):
@@ -145,19 +145,6 @@ class PortfolioOptimizer:
         ax.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
                 zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
 
-        # Annotating the min variance point
-        ax.annotate(f'Min Variance\nStdv: {min_var_point[1]:.4f}', 
-                    xy=(min_var_point[1], min_var_point[0]), 
-                    xytext=(min_var_point[1] + 0.03, min_var_point[0] + 0.03),
-                    arrowprops=dict(facecolor='green', shrink=0.05),
-                    verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=10, fontweight='bold')
-
-        # Annotating the max Sharpe ratio point
-        ax.annotate(f'Max Sharpe Ratio\nSharpe: {max_sharpe_point[2]:.4f}', 
-                    xy=(max_sharpe_point[1], max_sharpe_point[0]), 
-                    xytext=(max_sharpe_point[1] - 0.15, max_sharpe_point[0] + 0.03),
-                    arrowprops=dict(facecolor='red', shrink=0.05),
-                    verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=10, fontweight='bold')
 
         # Additional plot settings for aesthetics
         ax.set_xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
@@ -401,9 +388,8 @@ class PortfolioFrontend:
         def close_plot_and_show_metrics():
             self.plot_window.destroy()
             self.show_portfolio_metrics(self.metrics_dict)
-            
-        ttk.Button(plot_frame, text="Exit", command=close_plot_and_show_metrics).pack(side=tk.BOTTOM, pady=10)
 
+        ttk.Button(plot_frame, text="Exit", command=close_plot_and_show_metrics).pack(side=tk.BOTTOM, pady=10)
 
     def show_portfolio_metrics(self, metrics_dict):
         top = tk.Toplevel(self.root)
@@ -417,15 +403,15 @@ class PortfolioFrontend:
         formatted_str = ""
 
         try:
-            formatted_str += "{:<25s}{:^15s}{:^15s}{:^15s}{:^15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
-            formatted_str += "-" * (25 + 1 + 15 + 1 + 15 + 1 + 15 + 1 + 15) + "\n"
+            formatted_str += "{:<25s}{:^15s}{:^15s}{:^15s}{:>15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
+            formatted_str += "-" * (86) + "\n"
             for key in metrics_dict:
                 formatted_str += "{:<25s}".format(key) 
                 return_value = metrics_dict[key][0]
                 volatility_value = metrics_dict[key][1]
                 sharpe_ratio_value = metrics_dict[key][2]
                 utility_value = metrics_dict[key][3]
-                formatted_str += "{:^15.4f}{:^15.4f}{:^15.4f}{:^15.4f}\n".format(return_value, volatility_value, sharpe_ratio_value, utility_value)
+                formatted_str += "{:<15.4f}{:^15.4f}{:^15.4f}{:>15.4f}\n".format(return_value, volatility_value, sharpe_ratio_value, utility_value)
 
         except Exception as e:
             formatted_str += f"Error occurred when formatting portfolio metrics: {e}\n"
@@ -444,8 +430,6 @@ class PortfolioFrontend:
         
         # Print to satisfy the assignment requirement
         print(f'\n{formatted_str}')
-        
-
 
     def parse_vectors(self, input_str):
         try:

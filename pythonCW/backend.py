@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=[], volatility=[], corr_matrix=[[],[]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
-        
+    def __init__(self, expected_return=[0.1934,0.1575], volatility=[0.3025, 0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=3, risk_aversion=3):
+
         """
         Initialize the PortfolioOptimizer instance.
 
@@ -17,11 +17,13 @@ class PortfolioOptimizer:
         - n: number of securities
         - risk_aversion: risk aversion parameter for utility calculation
         """
+
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.portfolio_size = portfolio_size
         self.risk_aversion = risk_aversion
-        if (self.is_effectively_empty(expected_return) and self.is_effectively_empty(volatility) and self.is_effectively_empty(corr_matrix)):
+        self.dataframe=None
+        if self.is_effectively_empty(expected_return, volatility,corr_matrix):
             self.returns=np.asarray(expected_return)
             corr_matrix = np.array(corr_matrix)
             stdv = np.array(volatility)
@@ -30,11 +32,12 @@ class PortfolioOptimizer:
             self.ds = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
             self.cov_matrix = self.compute_covariance_matrix(self.ds)
-            
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
+        _, _, self.C, _, self.G, self.H=self.calculate_intermediate_quantities()
         
-    def is_effectively_empty(self,lst):
-        if lst and len(lst)==self.portfolio_size:
+        
+    def is_effectively_empty(self,expected_return,volatility,corr_matrix):
+        if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
             return True
         return False
 
@@ -55,11 +58,14 @@ class PortfolioOptimizer:
 
     # Should we put them in safe as they are calculated once?
     def calculate_intermediate_quantities(self):
+        
+        # Should use self instead of returning everything. It's only calculated once
+        
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
         A = sum([sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
         B = sum([sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
-        C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        C = sum([sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
         M = np.dot(np.ones(self.portfolio_size), self.inv_cov_matrix)
         L = self.returns @ inv_cov_matrix
         D = B * C - A ** 2
@@ -89,14 +95,18 @@ class PortfolioOptimizer:
 
     # Gives correct calculation
     def calculate_minimum_variance_portfolio(self):
-        _, _, C, _, _, _ = self.calculate_intermediate_quantities()
-        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / C
+        
+        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) /self.C
+        
+        # don't need to calculate the metrics
+        
         return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
 
     # Gives correct calculation
     def calculate_optimum_variance_portfolio(self, target_return):
-        _, _, _, _, G, H = self.calculate_intermediate_quantities()
-        weights = G+(target_return*H)
+
+        # Don't need the metrics
+        weights = self.G+(target_return*self.H)
         return weights, self.calculate_portfolio_metrics(weights)
 
     def calculate_mean_variance_efficient_frontier(self):
@@ -110,12 +120,11 @@ class PortfolioOptimizer:
         return frontier_weights, frontier_metrics
 
     def plot_efficient_frontier(self):
+        
         """
         Plot the mean-variance efficient frontier along with the min variance point
         and the max Sharpe ratio point.
         """
-
-        # Data processing: Calculate the mean-variance efficient frontier
         _, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         frontier_risks = [metric[1] for metric in frontier_metrics]
         frontier_returns = [metric[0] for metric in frontier_metrics]
@@ -132,33 +141,15 @@ class PortfolioOptimizer:
         # Plotting the efficient frontier and key points
         plt.figure(figsize=(12, 8))
 
-        # Efficient frontier
         plt.plot(frontier_risks, frontier_returns, 'b-o', label='Efficient Frontier')
 
-        # plt.plot(min_var_point[1], min_var_point[0], marker='o', color='g', markersize=10, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
-        # plt.plot(max_sharpe_point[1], max_sharpe_point[0], marker='o', color='r', markersize=10, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
-        
         # Highlighting the min variance point
         plt.scatter(min_var_point[1], min_var_point[0], color='green', marker='o', s=100, 
                 zorder=5, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
-    
-        # Highlighting the max Sharpe ratio point
+
+    # Highlighting the max Sharpe ratio point
         plt.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
                     zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
-
-        # Annotating the min variance point
-        plt.annotate(f'Min Variance\nStdv: {min_var_point[1]:.4f}', 
-                    xy=(min_var_point[1], min_var_point[0]), 
-                    xytext=(min_var_point[1] + 0.03, min_var_point[0] + 0.03),
-                    arrowprops=dict(facecolor='green', shrink=0.05),
-                    verticalalignment='bottom', horizontalalignment='right', color='green', fontsize=10, fontweight='bold')
-
-        # Annotating the max Sharpe ratio point
-        plt.annotate(f'Max Sharpe Ratio\nSharpe: {max_sharpe_point[2]:.4f}', 
-                    xy=(max_sharpe_point[1], max_sharpe_point[0]), 
-                    xytext=(max_sharpe_point[1] - 0.15, max_sharpe_point[0] + 0.03),
-                    arrowprops=dict(facecolor='red', shrink=0.05),
-                    verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=10, fontweight='bold')
 
         # Additional plot settings for aesthetics
         plt.xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
@@ -171,9 +162,12 @@ class PortfolioOptimizer:
         plt.xlim(0.0, max(frontier_risks))
 
         # Show the plot
+        plt.tight_layout()  # Ensures labels do not overlap
         plt.show()
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
+        
+        # Should we make frontier_weights to self.frontier_weights as it's only calculated once?
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         if hasattr(self, 'ds'):
             weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
@@ -214,11 +208,13 @@ class PortfolioOptimizer:
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width
                 worksheet.column_dimensions[column].width = adjusted_width
         
+        # Use self.ds? 
+        
         return df
     
     def print_values(self, df):
             #Might be beneficial to do these prints prior to the rounding with 4 decimals
-            
+            print('\n' * 2)
             # Print maximum Sharpe Ratio
             max_sharpe_idx = df['Sharpe Ratio'].idxmax()
             max_sharpe_return = df.loc[max_sharpe_idx, 'Return']
