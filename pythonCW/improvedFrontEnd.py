@@ -273,39 +273,46 @@ class PortfolioFrontend:
 
         # Button Frame
         button_frame = ttk.Frame(self.frame)
-        button_frame.grid(column=0, row=6, columnspan=3, padx=10, pady=20, sticky=tk.W+tk.E)
+        button_frame.grid(column=0, row=6, columnspan=3, padx=10, pady=20, sticky=tk.W + tk.E)
 
         # Run Optimizer Button
-        run_button = ttk.Button(button_frame, text="Run Optimizer", command=self.run_optimizer, style='TButton')
+        run_button = ttk.Button(button_frame, text="Run Optimizer", command=self.click_run_optimizer, style='TButton')
         run_button.grid(column=0, row=0, padx=5, pady=10)
-
+        
+        # Run Optimizer Using Real Data
+        run_button = ttk.Button(button_frame, text="Run: Real Data", command=self.click_run_real_dat, style='TButton')
+        run_button.grid(column=1, row=0, padx=5, pady=10)
+        
         # Exit Button
-        exit_button = ttk.Button(button_frame, text="Exit", command=self.root.quit, style='TButton')
-        exit_button.grid(column=1, row=0, padx=5, pady=10)
+        exit_button = ttk.Button(button_frame, text="Exit", command=self.exit_program, style='TButton')
+        exit_button.grid(column=2, row=0, padx=5, pady=10)
 
         # Center buttons within the button_frame
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
 
+    def validate_portfolio_size(self, portfolio_size):
+        if portfolio_size < 2 or portfolio_size > 12:
+                messagebox.showerror("Error", "Portfolio Size must be between 2 and 12.")
+                return False
+        return True
+    
     def update_fields(self):
         try:
             portfolio_size = int(self.portfolio_size_entry.get())
+            if self.validate_portfolio_size(portfolio_size):
+                self.volatilities_text.delete(1.0, tk.END)
+                self.expected_returns_text.delete(1.0, tk.END)
+                self.correlation_matrix_text.delete(1.0, tk.END)
 
-            if portfolio_size < 2 or portfolio_size > 12:
-                messagebox.showerror("Error", "Portfolio Size must be between 2 and 12.")
-                return
+                default_volatilities = ",".join(["0.1"] * portfolio_size)
+                default_returns = ",".join(["0.05"] * portfolio_size)
+                default_correlation = ";".join([",".join(["1.0" if i == j else "0.3" for j in range(portfolio_size)]) for i in range(portfolio_size)])
 
-            self.volatilities_text.delete(1.0, tk.END)
-            self.expected_returns_text.delete(1.0, tk.END)
-            self.correlation_matrix_text.delete(1.0, tk.END)
-
-            default_volatilities = ",".join(["0.1"] * portfolio_size)
-            default_returns = ",".join(["0.05"] * portfolio_size)
-            default_correlation = ";".join([",".join(["1.0" if i == j else "0.3" for j in range(portfolio_size)]) for i in range(portfolio_size)])
-
-            self.volatilities_text.insert(tk.END, default_volatilities)
-            self.expected_returns_text.insert(tk.END, default_returns)
-            self.correlation_matrix_text.insert(tk.END, default_correlation)
+                self.volatilities_text.insert(tk.END, default_volatilities)
+                self.expected_returns_text.insert(tk.END, default_returns)
+                self.correlation_matrix_text.insert(tk.END, default_correlation)
 
         except ValueError:
             messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
@@ -327,7 +334,8 @@ class PortfolioFrontend:
             volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
             expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
             correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
-
+            
+            self.validate_portfolio_size(portfolio_size)
             if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
                 messagebox.showerror("Error", "The number of entries must match the portfolio size.")
                 return False
@@ -358,53 +366,54 @@ class PortfolioFrontend:
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input: {e}")
             return False
+    
 
-    def run_optimizer(self):
-        try:
+    def click_run_optimizer(self):
+        if self.process_user_inputs():
             portfolio_size = int(self.portfolio_size_entry.get())
-            
-            
-            # Get risk aversion and risk free rate, setting defaults if not provided
             risk_aversion_entry = self.risk_aversion_entry.get()
             risk_free_rate_entry = self.risk_free_rate_entry.get()
-            
-            risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
-            risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
-
             volatilities = self.parse_vectors(self.volatilities_text.get("1.0", tk.END))
             expected_returns = self.parse_vectors(self.expected_returns_text.get("1.0", tk.END))
             correlation_matrix = self.parse_correlation_matrix(self.correlation_matrix_text.get("1.0", tk.END))
+            risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
+            risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
+            self.optimizer = PortfolioOptimizer(expected_return=expected_returns,
+                                                    volatility=volatilities,
+                                                    corr_matrix=correlation_matrix,
+                                                    risk_free_rate=risk_free_rate,
+                                                    portfolio_size=portfolio_size,
+                                                    risk_aversion=risk_aversion)
+            self.run_optimizer() 
+        
+    
+    def click_run_real_dat(self):
+        portfolio_size = int(self.portfolio_size_entry.get())
+        if self.validate_portfolio_size(portfolio_size):
+            risk_aversion_entry = self.risk_aversion_entry.get()
+            risk_free_rate_entry = self.risk_free_rate_entry.get()
             
-            def input_validation(volatilities, expected_returns, correlation_matrix):
-                
-                if not (len(volatilities) == portfolio_size and len(expected_returns) == portfolio_size and len(correlation_matrix) == portfolio_size):
-                    messagebox.showinfo("Optimizer", "Inputs invalid. Using real data from Excel file.")
-                    
-                    # Load real data from Excel file
-                    optimizer = PortfolioOptimizer(expected_return=[],  
-                                                volatility=[],     
-                                                corr_matrix=[],    
-                                                risk_free_rate=risk_free_rate,
-                                                portfolio_size=portfolio_size,
-                                                risk_aversion=risk_aversion)
-                else:
-                    # Load input data from user
-                    optimizer = PortfolioOptimizer(expected_return=expected_returns,
-                                                volatility=volatilities,
-                                                corr_matrix=correlation_matrix,
-                                                risk_free_rate=risk_free_rate,
-                                                portfolio_size=portfolio_size,
-                                                risk_aversion=risk_aversion)
-                return optimizer
+            #TODO Make a message or some vison of averse and rf
+            risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
+            risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
+            self.optimizer = PortfolioOptimizer(expected_return=[],  
+                                                    volatility=[],     
+                                                    corr_matrix=[],    
+                                                    risk_free_rate=risk_free_rate,
+                                                    portfolio_size=portfolio_size,
+                                                    risk_aversion=risk_aversion)
+            self.run_optimizer() 
             
-            optimizer=input_validation(volatilities, expected_returns, correlation_matrix)
-            
-            self.show_plot(optimizer)
-            optimizer.write_to_excel('230023476PortfolioProblem.xlsx')
-            self.metrics_dict = optimizer.print_values()
+        
+    def run_optimizer(self):
+        if self.optimizer is not None:
+            try:
+                self.show_plot(self.optimizer)
+                self.optimizer.write_to_excel('230023476PortfolioProblem.xlsx')
+                self.metrics_dict = self.optimizer.print_values()
 
-        except ValueError as e:
-            messagebox.showerror("Error", str(e))
+            except ValueError as e:
+                messagebox.showerror("Error", str(e))
     
     def show_plot(self, optimizer):
         if hasattr(self, 'plot_window') and self.plot_window.winfo_exists():
@@ -498,12 +507,17 @@ class PortfolioFrontend:
         except ValueError as e:
             raise ValueError(f"Invalid correlation matrix input: {e}")
     
-    
+    def exit_program(self):
+        self.root.destroy()
+        self.root.quit()
     
 def main():
-    root = tk.Tk()
-    app = PortfolioFrontend(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = PortfolioFrontend(root)
+        root.mainloop()
+    except Exception as e:
+        print(f"An error occurred: {e}")
     
 if __name__ == "__main__":
     main()
