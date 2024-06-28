@@ -18,7 +18,7 @@ class PortfolioOptimizer:
         - n: number of securities
         - risk_aversion: risk aversion parameter for utility calculation
         """
-        
+
         self.expected_return = expected_return
         self.risk_free_rate = risk_free_rate
         self.portfolio_size = portfolio_size
@@ -33,9 +33,8 @@ class PortfolioOptimizer:
             self.ds = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
             self.cov_matrix = self.compute_covariance_matrix(self.ds)
-            
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
-        _, _, self.C, _, self.G, self.H=self.calculate_intermediate_quantities()
+        self.C, self.G, self.H=self.calculate_intermediate_quantities()
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
         if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
@@ -57,31 +56,30 @@ class PortfolioOptimizer:
         cov_matrix = dataset.drop(columns=['Date']).cov() * 12
         return cov_matrix
 
-    # Should we put them in safe as they are calculated once?
     def calculate_intermediate_quantities(self):
+        # Calculates all variables from HL model
+        #TODO Make sure the results equal the ons from the excel sheet provided
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
-        A = np.sum([np.sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
-        B = np.sum([np.sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
-        C = np.sum([np.sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        A = sum([sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        B = sum([sum(self.returns[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
+        C = sum([sum(u[i] * u[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
         M = np.dot(np.ones(self.portfolio_size), self.inv_cov_matrix)
         L = self.returns @ inv_cov_matrix
         D = B * C - A ** 2
         LA = np.dot(L, A)  # Vector L multiplied by matrix A
         MB = np.dot(M, B)  # Vector M multiplied by matrix B
         
-        # Calculate G
         G = (1/D) * (MB - LA)
         
         LB = L * C  # Vector L multiplied by matrix B
         MA = M * A  # Vector M multiplied by matrix A
 
-        # Calculate H
         H = (LB - MA) / D
         
-        return A, B, C, D, G, H
+        return C, G, H
     
-    # Gives correct calculation
+    # Calculate all relevant values for a portfolio
     def calculate_portfolio_metrics(self, weights):
         portfolio_return = np.sum(weights * self.returns)
         portfolio_variance = np.dot(weights.T, np.dot(self.cov_matrix, weights))
@@ -91,33 +89,36 @@ class PortfolioOptimizer:
         utility = portfolio_return - 0.5 * self.risk_aversion * portfolio_variance
         return portfolio_return, portfolio_risk, sharpe_ratio, utility
 
-    # Gives correct calculation
+    # Calculate minimum variance weights
     def calculate_minimum_variance_portfolio(self):
-        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) / self.C
-        return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
+        min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) /self.C
+        return min_var_weights
 
-    # Gives correct calculation
+    # Calculate optimal variance weights
     def calculate_optimum_variance_portfolio(self, target_return):
         weights = self.G+(target_return*self.H)
-        return weights, self.calculate_portfolio_metrics(weights)
+        return weights
 
     def calculate_mean_variance_efficient_frontier(self):
-        min_var_weights, _ = self.calculate_minimum_variance_portfolio()
+        """
+        Calculate and returns one list of lists with all weights for the mean-variance optimal portfolio on target return.
+        Returns the efficient frotnier portfolio_return, portfolio_risk, sharpe_ratio, utility for mean-variance optimal portfolio
+        """
+        min_var_weights = self.calculate_minimum_variance_portfolio()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(target_return)
+            opt_var_weights = self.calculate_optimum_variance_portfolio(target_return)
             weights = (1 - target_return) * min_var_weights + target_return * opt_var_weights
             frontier_weights.append(weights)
         frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
         return frontier_weights, frontier_metrics
 
     def plot_efficient_frontier(self, ax):
+        
         """
         Plot the mean-variance efficient frontier along with the min variance point
         and the max Sharpe ratio point.
         """
-
-        # Data processing: Calculate the mean-variance efficient frontier
         _, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         frontier_risks = [metric[1] for metric in frontier_metrics]
         frontier_returns = [metric[0] for metric in frontier_metrics]
@@ -132,7 +133,6 @@ class PortfolioOptimizer:
         max_sharpe_point = frontier_metrics[max_sharpe_idx]
 
         # Plotting the efficient frontier and key points
-        # plt.figure(figsize=(12, 8))
 
         # Efficient frontier
         ax.plot(frontier_risks, frontier_returns, 'b-o', label='Efficient Frontier')
@@ -158,10 +158,12 @@ class PortfolioOptimizer:
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
-        if hasattr(self, 'ds'):
+        # Check if dataset exists or if the user input is the dataset for the weights columns
+        if hasattr(self, 'ds'): 
             weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
         else:
             weight_columns = [f'w{i+1}' for i in range(self.portfolio_size)]
+        
         data = {
             'Return': [metric[0] for metric in frontier_metrics],
             'Volatility': [metric[1] for metric in frontier_metrics],
@@ -169,6 +171,7 @@ class PortfolioOptimizer:
             'Sharpe Ratio': [metric[2] for metric in frontier_metrics]
         }
 
+        # Make columns for weights and round all data to 4 decimals
         for i, col in enumerate(weight_columns):
             data[col] = [w[i] for w in frontier_weights]
 
@@ -177,14 +180,13 @@ class PortfolioOptimizer:
         numeric_columns = ['Return', 'Volatility', 'Utility', 'Sharpe Ratio'] + weight_columns
         df[numeric_columns] = df[numeric_columns].round(4)
         
-        
+        # Write to excel sheet and replace existing output sheet if it exists
         with pd.ExcelWriter(output_file, mode='a', engine="openpyxl",if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name='output', index=False)
             workbook = writer.book
             worksheet = workbook['output']
             
-            # Regular nested for loop as requested
-            
+            # Regular nested for loop as requested from assignment
             for column_cells in worksheet.columns:
                 max_length = 0
                 column = column_cells[0].column_letter  # Get the column name
@@ -194,7 +196,7 @@ class PortfolioOptimizer:
                             max_length = len(cell.value)
                     except:
                         pass
-                adjusted_width = (max_length + 2) * 1.2  # Adjust the width
+                adjusted_width = (max_length + 2) * 1.2  # Adjust the width for autofitting
                 worksheet.column_dimensions[column].width = adjusted_width
         
             self.dataframe=df
@@ -221,13 +223,12 @@ class PortfolioFrontend:
         self.root = root
         self.root.title("Portfolio Optimizer")
         self.style = ttk.Style()
-        self.style.configure('TButton', font=('Helvetica', 12), padding=10, background='#4CAF50', foreground='#000000')  
+        self.style.configure('TButton', font=('Helvetica', 12), padding=10, background='#4CAF50', foreground='#000000')
         self.style.map('TButton', background=[('active', '#45a049')])
         self.create_widgets()
-        self.metrics_dict=None
+        self.metrics_dict = None
 
     def create_widgets(self):
-        
         self.frame = ttk.Frame(self.root, padding="20")
         self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
@@ -309,6 +310,55 @@ class PortfolioFrontend:
 
         except ValueError:
             messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
+
+    def validate_input(self, value, min_val, max_val, field_name):
+        try:
+            val = float(value)
+            if not (min_val <= val <= max_val):
+                messagebox.showerror("Error", f"{field_name} must be between {min_val} and {max_val}.")
+                return False
+            return True
+        except ValueError:
+            messagebox.showerror("Error", f"{field_name} must be a valid number.")
+            return False
+
+    def process_user_inputs(self):
+        try:
+            portfolio_size = int(self.portfolio_size_entry.get())
+            volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
+            expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
+            correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
+
+            if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
+                messagebox.showerror("Error", "The number of entries must match the portfolio size.")
+                return False
+
+            for vol in volatilities:
+                if not self.validate_input(vol, 0.0, 1.0, "Volatility"):
+                    return False
+
+            for ret in expected_returns:
+                if not self.validate_input(ret, -1.0, 1.0, "Expected Return"):
+                    return False
+
+            for row in correlation_rows:
+                correlations = row.split(',')
+                if len(correlations) != portfolio_size:
+                    messagebox.showerror("Error", "The correlation matrix must be square and match the portfolio size.")
+                    return False
+                for corr in correlations:
+                    if not self.validate_input(corr, -1.0, 1.0, "Correlation"):
+                        return False
+
+            self.volatilities = list(map(float, volatilities))
+            self.expected_returns = list(map(float, expected_returns))
+            self.correlation_matrix = [list(map(float, row.split(','))) for row in correlation_rows]
+
+            return True
+
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
+            return False
 
     def run_optimizer(self):
         try:
@@ -398,20 +448,20 @@ class PortfolioFrontend:
         # Calculate and set the geometry of the dialog based on content size
         rows = len(metrics_dict) + 1  # Including header row
         cols = 5 
-        top.geometry(f"{cols * 150}x{rows * 70}")  
+        top.geometry(f"{cols * 150}x{rows * 150}")  
         
         formatted_str = ""
 
         try:
-            formatted_str += "{:<25s}{:^15s}{:^15s}{:^15s}{:>15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
+            formatted_str += "{:<15s}{:^15s}{:^15s}{:^15s}{:>15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
             formatted_str += "-" * (86) + "\n"
             for key in metrics_dict:
-                formatted_str += "{:<25s}".format(key) 
+                formatted_str += "{:<15s}".format(key) 
                 return_value = metrics_dict[key][0]
                 volatility_value = metrics_dict[key][1]
                 sharpe_ratio_value = metrics_dict[key][2]
                 utility_value = metrics_dict[key][3]
-                formatted_str += "{:<15.4f}{:^15.4f}{:^15.4f}{:>15.4f}\n".format(return_value, volatility_value, sharpe_ratio_value, utility_value)
+                formatted_str += "{:^15.4f}{:^15.4f}{:^15.4f}{:>15.4f}\n".format(return_value, volatility_value, sharpe_ratio_value, utility_value)
 
         except Exception as e:
             formatted_str += f"Error occurred when formatting portfolio metrics: {e}\n"
@@ -426,7 +476,7 @@ class PortfolioFrontend:
         text_widget.pack(expand=True, fill='both', padx=10, pady=10)
 
         # Button to close the window
-        # ttk.Button(frame, text="Close", command=top.destroy).pack(pady=10)
+        ttk.Button(frame, text="Close", command=top.destroy).pack(pady=10)
         
         # Print to satisfy the assignment requirement
         print(f'\n{formatted_str}')

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=[0.1934,0.1575], volatility=[0.3025, 0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=3, risk_aversion=3):
+    def __init__(self, expected_return=[0.1934,0.1575], volatility=[0.3025, 0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
 
         """
         Initialize the PortfolioOptimizer instance.
@@ -33,7 +33,7 @@ class PortfolioOptimizer:
             self.returns = self.calculate_annualized_returns()
             self.cov_matrix = self.compute_covariance_matrix(self.ds)
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
-        _, _, self.C, _, self.G, self.H=self.calculate_intermediate_quantities()
+        self.C, self.G, self.H=self.calculate_intermediate_quantities()
         
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
@@ -56,11 +56,9 @@ class PortfolioOptimizer:
         cov_matrix = dataset.drop(columns=['Date']).cov() * 12
         return cov_matrix
 
-    # Should we put them in safe as they are calculated once?
     def calculate_intermediate_quantities(self):
-        
-        # Should use self instead of returning everything. It's only calculated once
-        
+        # Calculates all variables from HL model
+        #TODO Make sure the results equal the ons from the excel sheet provided
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
         A = sum([sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
@@ -72,18 +70,16 @@ class PortfolioOptimizer:
         LA = np.dot(L, A)  # Vector L multiplied by matrix A
         MB = np.dot(M, B)  # Vector M multiplied by matrix B
         
-        # Calculate G
         G = (1/D) * (MB - LA)
         
         LB = L * C  # Vector L multiplied by matrix B
         MA = M * A  # Vector M multiplied by matrix A
 
-        # Calculate H
         H = (LB - MA) / D
         
-        return A, B, C, D, G, H
+        return C, G, H
     
-    # Gives correct calculation
+    # Calculate all relevant values for a portfolio
     def calculate_portfolio_metrics(self, weights):
         portfolio_return = np.sum(weights * self.returns)
         portfolio_variance = np.dot(weights.T, np.dot(self.cov_matrix, weights))
@@ -93,27 +89,25 @@ class PortfolioOptimizer:
         utility = portfolio_return - 0.5 * self.risk_aversion * portfolio_variance
         return portfolio_return, portfolio_risk, sharpe_ratio, utility
 
-    # Gives correct calculation
+    # Calculate minimum variance weights
     def calculate_minimum_variance_portfolio(self):
-        
         min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) /self.C
-        
-        # don't need to calculate the metrics
-        
-        return min_var_weights, self.calculate_portfolio_metrics(min_var_weights)
+        return min_var_weights
 
-    # Gives correct calculation
+    # Calculate optimal variance weights
     def calculate_optimum_variance_portfolio(self, target_return):
-
-        # Don't need the metrics
         weights = self.G+(target_return*self.H)
-        return weights, self.calculate_portfolio_metrics(weights)
+        return weights
 
     def calculate_mean_variance_efficient_frontier(self):
-        min_var_weights, _ = self.calculate_minimum_variance_portfolio()
+        """
+        Calculate and returns one list of lists with all weights for the mean-variance optimal portfolio on target return.
+        Returns the efficient frotnier portfolio_return, portfolio_risk, sharpe_ratio, utility for mean-variance optimal portfolio
+        """
+        min_var_weights = self.calculate_minimum_variance_portfolio()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights, _ = self.calculate_optimum_variance_portfolio(target_return)
+            opt_var_weights = self.calculate_optimum_variance_portfolio(target_return)
             weights = (1 - target_return) * min_var_weights + target_return * opt_var_weights
             frontier_weights.append(weights)
         frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
@@ -147,7 +141,7 @@ class PortfolioOptimizer:
         plt.scatter(min_var_point[1], min_var_point[0], color='green', marker='o', s=100, 
                 zorder=5, label=f'Min Variance Stdv: {min_var_point[1]:.4f}')
 
-    # Highlighting the max Sharpe ratio point
+        # Highlighting the max Sharpe ratio point
         plt.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
                     zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
 
@@ -167,12 +161,13 @@ class PortfolioOptimizer:
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
         
-        # Should we make frontier_weights to self.frontier_weights as it's only calculated once?
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
-        if hasattr(self, 'ds'):
+        # Check if dataset exists or if the user input is the dataset for the weights columns
+        if hasattr(self, 'ds'): 
             weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
         else:
             weight_columns = [f'w{i+1}' for i in range(self.portfolio_size)]
+        
         data = {
             'Return': [metric[0] for metric in frontier_metrics],
             'Volatility': [metric[1] for metric in frontier_metrics],
@@ -180,6 +175,7 @@ class PortfolioOptimizer:
             'Sharpe Ratio': [metric[2] for metric in frontier_metrics]
         }
 
+        # Make columns for weights and round all data to 4 decimals
         for i, col in enumerate(weight_columns):
             data[col] = [w[i] for w in frontier_weights]
 
@@ -188,14 +184,13 @@ class PortfolioOptimizer:
         numeric_columns = ['Return', 'Volatility', 'Utility', 'Sharpe Ratio'] + weight_columns
         df[numeric_columns] = df[numeric_columns].round(4)
         
-        
+        # Write to excel sheet and replace existing output sheet if it exists
         with pd.ExcelWriter(output_file, mode='a', engine="openpyxl",if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name='output', index=False)
             workbook = writer.book
             worksheet = workbook['output']
             
-            # Regular nested for loop as requested
-            
+            # Regular nested for loop as requested from assignment
             for column_cells in worksheet.columns:
                 max_length = 0
                 column = column_cells[0].column_letter  # Get the column name
@@ -205,15 +200,17 @@ class PortfolioOptimizer:
                             max_length = len(cell.value)
                     except:
                         pass
-                adjusted_width = (max_length + 2) * 1.2  # Adjust the width
+                adjusted_width = (max_length + 2) * 1.2  # Adjust the width for autofitting
                 worksheet.column_dimensions[column].width = adjusted_width
         
-        # Use self.ds? 
+        # TODO Use self.ds? 
         
         return df
     
     def print_values(self, df):
-            #Might be beneficial to do these prints prior to the rounding with 4 decimals
+        
+            #TODO Might be beneficial to do these prints prior to the rounding with 4 decimals
+                
             print('\n' * 2)
             # Print maximum Sharpe Ratio
             max_sharpe_idx = df['Sharpe Ratio'].idxmax()
