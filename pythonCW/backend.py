@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 
 class PortfolioOptimizer:
-    def __init__(self, expected_return=[0.1934,0.1575], volatility=[0.3025, 0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
+    def __init__(self, expected_return=[0.193,0.1575], volatility=[0.3025, 0.219], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
 
         """
         Initialize the PortfolioOptimizer instance.
@@ -14,7 +14,7 @@ class PortfolioOptimizer:
         - volatility: list/array of volatilities for each security
         - corr_matrix: correlation matrix between securities
         - risk_free_rate: risk-free rate
-        - n: number of securities
+        - portfolio_size: number of securities
         - risk_aversion: risk aversion parameter for utility calculation
         """
 
@@ -29,31 +29,32 @@ class PortfolioOptimizer:
             stdv = np.array(volatility)
             self.cov_matrix = np.outer(stdv, stdv) * corr_matrix
         else:
-            self.ds = self.get_data(portfolio_size)
+            self.dataset = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
-            self.cov_matrix = self.compute_covariance_matrix(self.ds)
+            self.cov_matrix = self.compute_covariance_matrix()
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
         self.C, self.G, self.H=self.calculate_intermediate_quantities()
         
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
-        if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
+        if expected_return and len(expected_return)==self.portfolio_size and volatility and len(volatility)==self.portfolio_size and corr_matrix and len(corr_matrix)==self.portfolio_size:
             return True
         return False
 
     def get_data(self, n):
         ds = pd.read_excel('230023476PortfolioProblem.xlsx')
         ds['Date'] = pd.to_datetime(ds['Date'])
-        ds.iloc[:, 1:] = ds.iloc[:, 1:].pct_change()
+        ds.iloc[:, 1:] = ds.iloc[:, 1:].pct_change() # Generate returns from prices
+        print(ds.iloc[:, :n + 1].dropna())
         return ds.iloc[:, :n + 1].dropna()
 
     def calculate_annualized_returns(self):
-        returns = self.ds.iloc[:, 1:] # Exclude dates
+        returns = self.dataset.iloc[:, 1:] # Exclude dates
         compounded_returns = (returns + 1).prod() ** (12 / len(returns)) - 1
         return compounded_returns.values
 
-    def compute_covariance_matrix(self, dataset):
-        cov_matrix = dataset.drop(columns=['Date']).cov() * 12
+    def compute_covariance_matrix(self):
+        cov_matrix = self.dataset.drop(columns=['Date']).cov() * 12
         return cov_matrix
 
     def calculate_intermediate_quantities(self):
@@ -114,7 +115,6 @@ class PortfolioOptimizer:
         return frontier_weights, frontier_metrics
 
     def plot_efficient_frontier(self):
-        
         """
         Plot the mean-variance efficient frontier along with the min variance point
         and the max Sharpe ratio point.
@@ -164,7 +164,7 @@ class PortfolioOptimizer:
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
         # Check if dataset exists or if the user input is the dataset for the weights columns
         if hasattr(self, 'ds'): 
-            weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
+            weight_columns = [f'w_{col}' for col in self.dataset.columns[1:]]
         else:
             weight_columns = [f'w{i+1}' for i in range(self.portfolio_size)]
         
@@ -203,20 +203,18 @@ class PortfolioOptimizer:
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width for autofitting
                 worksheet.column_dimensions[column].width = adjusted_width
         
-        # TODO Use self.ds? 
+        # TODO Use self.dataset? 
         
-        return df
+        self.dataframe=df
     
-    def print_values(self, df):
-        
-            #TODO Might be beneficial to do these prints prior to the rounding with 4 decimals
+    def print_values(self):
                 
             print('\n' * 2)
             # Print maximum Sharpe Ratio
-            max_sharpe_idx = df['Sharpe Ratio'].idxmax()
-            max_sharpe_return = df.loc[max_sharpe_idx, 'Return']
-            max_sharpe_volatility = df.loc[max_sharpe_idx, 'Volatility']
-            max_sharpe_value = df.loc[max_sharpe_idx, 'Sharpe Ratio']
+            max_sharpe_idx = self.dataframe['Sharpe Ratio'].idxmax()
+            max_sharpe_return = self.dataframe.loc[max_sharpe_idx, 'Return']
+            max_sharpe_volatility = self.dataframe.loc[max_sharpe_idx, 'Volatility']
+            max_sharpe_value = self.dataframe.loc[max_sharpe_idx, 'Sharpe Ratio']
             
             print(f"Maximum Sharpe Ratio Portfolio:")
             print(f"Return: {max_sharpe_return:.4f}, Volatility: {max_sharpe_volatility:.4f}, Sharpe Ratio: {max_sharpe_value:.4f}")
@@ -224,19 +222,19 @@ class PortfolioOptimizer:
             print('\n' * 2)
             
             # Print maximum Utility
-            max_utility_idx = df['Utility'].idxmax()
-            max_utility_return = df.loc[max_utility_idx, 'Return']
-            max_utility_volatility = df.loc[max_utility_idx, 'Volatility']
-            max_utility_value = df.loc[max_utility_idx, 'Utility']
+            max_utility_idx = self.dataframe['Utility'].idxmax()
+            max_utility_return = self.dataframe.loc[max_utility_idx, 'Return']
+            max_utility_volatility = self.dataframe.loc[max_utility_idx, 'Volatility']
+            max_utility_value = self.dataframe.loc[max_utility_idx, 'Utility']
             print(f"Maximum Utility Portfolio:")
             print(f"Return: {max_utility_return:.4f}, Volatility: {max_utility_volatility:.4f}, Utility: {max_utility_value:.4f}")
             
             print('\n' * 2)    
              
             # Print minimum volatility
-            min_volatility_idx = df['Volatility'].idxmin()
-            min_volatility_return = df.loc[min_volatility_idx, 'Return']
-            min_volatility_volatility = df.loc[min_volatility_idx, 'Volatility']
+            min_volatility_idx = self.dataframe['Volatility'].idxmin()
+            min_volatility_return = self.dataframe.loc[min_volatility_idx, 'Return']
+            min_volatility_volatility = self.dataframe.loc[min_volatility_idx, 'Volatility']
             
             print(f"Minimum Volatility Portfolio:")
             print(f"Return: {min_volatility_return:.4f}, Volatility: {min_volatility_volatility:.4f}")
@@ -246,8 +244,8 @@ class PortfolioOptimizer:
 def main():
     optimizer = PortfolioOptimizer()
     optimizer.plot_efficient_frontier()
-    dataframe=optimizer.write_to_excel()
-    optimizer.print_values(dataframe)
+    optimizer.write_to_excel()
+    optimizer.print_values()
     
 if __name__ == "__main__":
     main()

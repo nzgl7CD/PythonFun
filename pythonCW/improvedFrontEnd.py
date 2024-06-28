@@ -37,7 +37,7 @@ class PortfolioOptimizer:
         self.C, self.G, self.H=self.calculate_intermediate_quantities()
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
-        if expected_return and len(expected_return)==self.portfolio_size or volatility and len(volatility)==self.portfolio_size or corr_matrix and len(corr_matrix)==self.portfolio_size:
+        if expected_return and len(expected_return)==self.portfolio_size and volatility and len(volatility)==self.portfolio_size and corr_matrix and len(corr_matrix)==self.portfolio_size:
             return True
         return False
 
@@ -144,7 +144,6 @@ class PortfolioOptimizer:
         # Highlighting the max Sharpe ratio point
         ax.scatter(max_sharpe_point[1], max_sharpe_point[0], color='red', marker='o', s=100, 
                 zorder=5, label=f'Max Sharpe Ratio: {max_sharpe_point[2]:.4f}')
-
 
         # Additional plot settings for aesthetics
         ax.set_xlabel('Portfolio Volatility (Risk)', fontsize=12, fontweight='bold')
