@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class PortfolioOptimizer:
-    def __init__(self, expected_return=[], volatility=[], corr_matrix=[[],[]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
+    def __init__(self, expected_return, volatility, corr_matrix, risk_free_rate, portfolio_size, risk_aversion):
         
         """
         Initialize the PortfolioOptimizer instance.
@@ -24,22 +24,39 @@ class PortfolioOptimizer:
         self.portfolio_size = portfolio_size
         self.risk_aversion = risk_aversion
         self.dataframe=None
-        if self.is_effectively_empty(expected_return, volatility,corr_matrix):
+        
+        if not self.is_effectively_empty(expected_return, volatility,corr_matrix):
             self.returns=np.asarray(expected_return)
             corr_matrix = np.array(corr_matrix)
             stdv = np.array(volatility)
             self.cov_matrix = np.outer(stdv, stdv) * corr_matrix
+            
+            # Alternative to show essential coding skills and knowledge 
+            # self.returns = list(expected_return)
+            # corr_matrix = list(corr_matrix)
+            # stdv = list(volatility)
+
+            # # Initialize the covariance matrix with zeros
+            # self.cov_matrix = [[0.0 for _ in range(len(stdv))] for _ in range(len(stdv))]
+
+            # # Calculate the covariance matrix using nested loops
+            # for i in range(len(stdv)):
+            #     for j in range(len(stdv)):
+            #         self.cov_matrix[i][j] = stdv[i] * stdv[j] * corr_matrix[i][j]
+            
         else:
+            # Use real data from excel input sheet
             self.ds = self.get_data(portfolio_size)
             self.returns = self.calculate_annualized_returns()
             self.cov_matrix = self.compute_covariance_matrix(self.ds)
+            
         self.inv_cov_matrix = np.linalg.inv(self.cov_matrix)
         self.C, self.G, self.H=self.calculate_intermediate_quantities()
         
     def is_effectively_empty(self,expected_return,volatility,corr_matrix):
         if expected_return and len(expected_return)==self.portfolio_size and volatility and len(volatility)==self.portfolio_size and corr_matrix and len(corr_matrix)==self.portfolio_size:
-            return True
-        return False
+            return False
+        return True
 
     def get_data(self, n):
         ds = pd.read_excel('230023476PortfolioProblem.xlsx')
@@ -58,7 +75,7 @@ class PortfolioOptimizer:
 
     def calculate_intermediate_quantities(self):
         # Calculates all variables from HL model
-        #TODO Make sure the results equal the ons from the excel sheet provided
+        #TODO 
         u = np.ones(self.portfolio_size)
         inv_cov_matrix = self.inv_cov_matrix
         A = sum([sum(u[i] * self.returns[j] * inv_cov_matrix[i, j] for i in range(self.portfolio_size)) for j in range(self.portfolio_size)])
@@ -77,6 +94,8 @@ class PortfolioOptimizer:
 
         H = (LB - MA) / D
         
+        # Return variable used in other functions only
+        
         return C, G, H
     
     # Calculate all relevant values for a portfolio
@@ -86,16 +105,16 @@ class PortfolioOptimizer:
         portfolio_risk = np.sqrt(portfolio_variance)
         excess_return = portfolio_return - self.risk_free_rate
         sharpe_ratio = excess_return / portfolio_risk
-        utility = portfolio_return - 0.5 * self.risk_aversion * portfolio_variance
+        utility = portfolio_return - (0.5 * self.risk_aversion * portfolio_variance)
         return portfolio_return, portfolio_risk, sharpe_ratio, utility
 
     # Calculate minimum variance weights
-    def calculate_minimum_variance_portfolio(self):
+    def calculate_minimum_variance_weights(self):
         min_var_weights = np.dot(self.inv_cov_matrix, np.ones(self.portfolio_size)) /self.C
         return min_var_weights
 
     # Calculate optimal variance weights
-    def calculate_optimum_variance_portfolio(self, target_return):
+    def calculate_optimum_variance_weights(self, target_return):
         weights = self.G+(target_return*self.H)
         return weights
 
@@ -104,10 +123,10 @@ class PortfolioOptimizer:
         Calculate and returns one list of lists with all weights for the mean-variance optimal portfolio on target return.
         Returns the efficient frotnier portfolio_return, portfolio_risk, sharpe_ratio, utility for mean-variance optimal portfolio
         """
-        min_var_weights = self.calculate_minimum_variance_portfolio()
+        min_var_weights = self.calculate_minimum_variance_weights()
         frontier_weights = []
         for target_return in np.linspace(0, 1, 101):
-            opt_var_weights = self.calculate_optimum_variance_portfolio(target_return)
+            opt_var_weights = self.calculate_optimum_variance_weights(target_return)
             weights = (1 - target_return) * min_var_weights + target_return * opt_var_weights
             frontier_weights.append(weights)
         frontier_metrics = [self.calculate_portfolio_metrics(w) for w in frontier_weights]
@@ -156,7 +175,27 @@ class PortfolioOptimizer:
         ax.set_xlim(0.0, max(frontier_risks))
 
     def write_to_excel(self, output_file='230023476PortfolioProblem.xlsx'):
+        """
+        summary_
+        Writes the calculated mean-variance efficient frontier data to an Excel file.
+
+        Steps:
+        1. Calculates the efficient frontier weights and metrics by calling the 
+        `calculate_mean_variance_efficient_frontier` method.
+        2. Checks if a dataset (`self.ds`) is available to determine the column names 
+        for the weights. If not, generates default weight column names based on 
+        the portfolio size.
+        3. Constructs a dictionary to store the data for Return, Volatility, Utility, 
+        Sharpe Ratio, and weights.
+        4. Creates a DataFrame from the data dictionary and rounds all numeric values 
+        to 4 decimal places.
+        5. Writes the DataFrame to an Excel file, replacing the existing 'output' sheet 
+        if it exists.
+        6. Adjusts the column widths in the Excel sheet to fit the content.
+        """
+        # get weights for columns and metrics for portfolio values
         frontier_weights, frontier_metrics = self.calculate_mean_variance_efficient_frontier()
+        
         # Check if dataset exists or if the user input is the dataset for the weights columns
         if hasattr(self, 'ds'): 
             weight_columns = [f'w_{col}' for col in self.ds.columns[1:]]
@@ -166,8 +205,9 @@ class PortfolioOptimizer:
         data = {
             'Return': [metric[0] for metric in frontier_metrics],
             'Volatility': [metric[1] for metric in frontier_metrics],
-            'Utility': [metric[3] for metric in frontier_metrics],
-            'Sharpe Ratio': [metric[2] for metric in frontier_metrics]
+            'Sharpe Ratio': [metric[2] for metric in frontier_metrics],
+            'Utility': [metric[3] for metric in frontier_metrics]
+            
         }
 
         # Make columns for weights and round all data to 4 decimals
@@ -176,7 +216,7 @@ class PortfolioOptimizer:
 
         df = pd.DataFrame(data)
         df.sort_values(by='Return', inplace=True)
-        numeric_columns = ['Return', 'Volatility', 'Utility', 'Sharpe Ratio'] + weight_columns
+        numeric_columns = ['Return', 'Volatility', 'Sharpe Ratio', 'Utility'] + weight_columns
         df[numeric_columns] = df[numeric_columns].round(4)
         
         # Write to excel sheet and replace existing output sheet if it exists
@@ -185,7 +225,7 @@ class PortfolioOptimizer:
             workbook = writer.book
             worksheet = workbook['output']
             
-            # Regular nested for loop as requested from assignment
+            # Fit cells with regular nested for loop as requested from assignment
             for column_cells in worksheet.columns:
                 max_length = 0
                 column = column_cells[0].column_letter  # Get the column name
@@ -197,10 +237,16 @@ class PortfolioOptimizer:
                         pass
                 adjusted_width = (max_length + 2) * 1.2  # Adjust the width for autofitting
                 worksheet.column_dimensions[column].width = adjusted_width
-        
+
             self.dataframe=df
     
     def print_values(self):
+        """_summary_
+            Collects return, volatility, sharpe ration and utility of three portolfios from the excel sheet
+        Returns:
+            Dictionary of relevant values
+        """
+        
         df = self.dataframe
         output_str = ""
         
@@ -213,9 +259,9 @@ class PortfolioOptimizer:
         min_volatility_idx = df['Volatility'].idxmin()
         min_volatility_return, min_volatility_volatility, min_volatility_sharpe, min_volatility_utility = df.loc[min_volatility_idx, ['Return', 'Volatility', 'Sharpe Ratio', 'Utility']]
         
-        return {'MaxSharpeRatio': [max_sharpe_return, max_sharpe_volatility, max_sharpe_value, max_sharpe_utility],
-                'MaxUtility': [max_utility_return, max_utility_volatility, max_utility_sharpe, max_utility_value],
-                'MinVar': [min_volatility_return, min_volatility_volatility, min_volatility_sharpe, min_volatility_utility]}
+        return {'MaxSharpeRatio': [max_sharpe_idx,max_sharpe_return, max_sharpe_volatility, max_sharpe_value, max_sharpe_utility],
+                'MaxUtility': [max_utility_idx, max_utility_return, max_utility_volatility, max_utility_sharpe, max_utility_value],
+                'MinVar': [min_volatility_idx,min_volatility_return, min_volatility_volatility, min_volatility_sharpe, min_volatility_utility]}
         
 class PortfolioFrontend:
     def __init__(self, root):
@@ -236,6 +282,12 @@ class PortfolioFrontend:
         self.portfolio_size_entry = ttk.Entry(self.frame, width=10, font=('Helvetica', 12))
         self.portfolio_size_entry.grid(column=1, row=0, padx=10, pady=10)
         self.portfolio_size_entry.insert(tk.END, "2")
+        
+        # Risk-Free Rate
+        ttk.Label(self.frame, text="Risk-Free Rate:").grid(column=0, row=2, padx=10, pady=10, sticky=tk.W)
+        self.risk_free_rate_entry = ttk.Entry(self.frame, width=10, font=('Helvetica', 12))
+        self.risk_free_rate_entry.grid(column=1, row=2, padx=10, pady=10)
+        self.risk_free_rate_entry.insert(tk.END, "0.045")
 
         # Risk Aversion
         ttk.Label(self.frame, text="Risk Aversion:").grid(column=0, row=1, padx=10, pady=10, sticky=tk.W)
@@ -243,47 +295,41 @@ class PortfolioFrontend:
         self.risk_aversion_entry.grid(column=1, row=1, padx=10, pady=10)
         self.risk_aversion_entry.insert(tk.END, "3.0")
 
-        # Risk-Free Rate
-        ttk.Label(self.frame, text="Risk-Free Rate:").grid(column=0, row=2, padx=10, pady=10, sticky=tk.W)
-        self.risk_free_rate_entry = ttk.Entry(self.frame, width=10, font=('Helvetica', 12))
-        self.risk_free_rate_entry.grid(column=1, row=2, padx=10, pady=10)
-        self.risk_free_rate_entry.insert(tk.END, "0.045")
-
         # Update Fields Button
-        update_button = ttk.Button(self.frame, text="Update Fields", command=self.update_fields, style='TButton')
+        update_button = ttk.Button(self.frame, text="Update Fields", command=self.click_update_fields, style='TButton')
         update_button.grid(column=2, row=0, padx=10, pady=10)
-
-        # Volatilities
-        ttk.Label(self.frame, text="Volatilities (comma-separated):").grid(column=0, row=3, padx=10, pady=10, sticky=tk.W)
-        self.volatilities_text = tk.Text(self.frame, width=60, height=1, font=('Helvetica', 12))
-        self.volatilities_text.grid(column=1, row=3, columnspan=2, padx=10, pady=10)
-        self.volatilities_text.insert(tk.END, "0.3025, 0.219")
-
+        
         # Expected Returns
         ttk.Label(self.frame, text="Expected Returns (comma-separated):").grid(column=0, row=4, padx=10, pady=10, sticky=tk.W)
         self.expected_returns_text = tk.Text(self.frame, width=60, height=1, font=('Helvetica', 12))
         self.expected_returns_text.grid(column=1, row=4, columnspan=2, padx=10, pady=10)
-        self.expected_returns_text.insert(tk.END, "0.1934, 0.1575")
+        self.expected_returns_text.insert(tk.END, "0.1934, 0.1575") # Suggest standards from excel file provided
+        
+        # Volatilities
+        ttk.Label(self.frame, text="Volatilities (comma-separated):").grid(column=0, row=3, padx=10, pady=10, sticky=tk.W)
+        self.volatilities_text = tk.Text(self.frame, width=60, height=1, font=('Helvetica', 12))
+        self.volatilities_text.grid(column=1, row=3, columnspan=2, padx=10, pady=10)
+        self.volatilities_text.insert(tk.END, "0.3025, 0.219") # Suggest standards from excel file provided
 
         # Correlation Matrix
         ttk.Label(self.frame, text="Correlation Matrix (semicolon-separated rows):").grid(column=0, row=5, padx=10, pady=10, sticky=tk.W)
         self.correlation_matrix_text = tk.Text(self.frame, width=60, height=4, font=('Helvetica', 12))
         self.correlation_matrix_text.grid(column=1, row=5, columnspan=2, padx=10, pady=10)
-        self.correlation_matrix_text.insert(tk.END, "1.0, 0.35; 0.35, 1.0")
+        self.correlation_matrix_text.insert(tk.END, "1.0, 0.35; 0.35, 1.0") # Suggest standards from excel file provided
 
-        # Button Frame
+        # Button Frame to centre the buttons 
         button_frame = ttk.Frame(self.frame)
         button_frame.grid(column=0, row=6, columnspan=3, padx=10, pady=20, sticky=tk.W + tk.E)
 
-        # Run Optimizer Button
+        # Run Optimizer Button for input data
         run_button = ttk.Button(button_frame, text="Run Optimizer", command=self.click_run_optimizer, style='TButton')
         run_button.grid(column=0, row=0, padx=5, pady=10)
         
-        # Run Optimizer Using Real Data
+        # Run Optimizer Using Real Data 
         run_button = ttk.Button(button_frame, text="Run: Real Data", command=self.click_run_real_dat, style='TButton')
         run_button.grid(column=1, row=0, padx=5, pady=10)
         
-        # Exit Button
+        # Exit Button to quit program
         exit_button = ttk.Button(button_frame, text="Exit", command=self.exit_program, style='TButton')
         exit_button.grid(column=2, row=0, padx=5, pady=10)
 
@@ -291,32 +337,45 @@ class PortfolioFrontend:
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
         button_frame.columnconfigure(2, weight=1)
-
-    def validate_portfolio_size(self, portfolio_size):
-        if portfolio_size < 2 or portfolio_size > 12:
-                messagebox.showerror("Error", "Portfolio Size must be between 2 and 12.")
-                return False
-        return True
     
-    def update_fields(self):
+    def click_update_fields(self):
+        """_summary_
+        1. Validates if portfolio size, aversion and risk free rate are valid numbers
+        2. Updates remaining fields with lengths that match portfolio size with standardised values. 
+        """
         try:
             portfolio_size = int(self.portfolio_size_entry.get())
-            if self.validate_portfolio_size(portfolio_size):
+            risk_aversion_entry = self.risk_aversion_entry.get()
+            risk_free_rate_entry = self.risk_free_rate_entry.get()
+            if self.validate_size_aversion_riskfree(portfolio_size, risk_aversion_entry,risk_free_rate_entry):
                 self.volatilities_text.delete(1.0, tk.END)
                 self.expected_returns_text.delete(1.0, tk.END)
                 self.correlation_matrix_text.delete(1.0, tk.END)
 
                 default_volatilities = ",".join(["0.1"] * portfolio_size)
-                default_returns = ",".join(["0.05"] * portfolio_size)
-                default_correlation = ";".join([",".join(["1.0" if i == j else "0.3" for j in range(portfolio_size)]) for i in range(portfolio_size)])
-
+                default_returns = ",".join(["0.1"] * portfolio_size)
+                default_correlation = ";".join([",".join(["1.0" if i == j else "0.35" for j in range(portfolio_size)]) for i in range(portfolio_size)])
+                
                 self.volatilities_text.insert(tk.END, default_volatilities)
                 self.expected_returns_text.insert(tk.END, default_returns)
                 self.correlation_matrix_text.insert(tk.END, default_correlation)
 
         except ValueError:
             messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
-
+    
+    def validate_size_aversion_riskfree(self, portfolio_size, risk_aversion, risk_free):
+        try:
+            if portfolio_size < 2 or portfolio_size > 12:
+                messagebox.showerror("Error", "Portfolio Size must be between 2 and 12.")
+                return False
+            elif risk_free and not self.validate_input(risk_free,-1.0,1.0,'Risk free rate'):
+                return False
+            elif  risk_aversion and not self.validate_input(risk_aversion,0,100.0,'Risk aversion'):
+                return False
+            return True
+        except ValueError:
+            messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
+            
     def validate_input(self, value, min_val, max_val, field_name):
         try:
             val = float(value)
@@ -324,50 +383,66 @@ class PortfolioFrontend:
                 messagebox.showerror("Error", f"{field_name} must be between {min_val} and {max_val}.")
                 return False
             return True
-        except ValueError:
-            messagebox.showerror("Error", f"{field_name} must be a valid number.")
+        
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
             return False
 
     def process_user_inputs(self):
         try:
             portfolio_size = int(self.portfolio_size_entry.get())
-            volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
-            expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
-            correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
+            risk_aversion_entry = self.risk_aversion_entry.get()
+            risk_free_rate_entry = self.risk_free_rate_entry.get()
             
-            self.validate_portfolio_size(portfolio_size)
-            if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
-                messagebox.showerror("Error", "The number of entries must match the portfolio size.")
-                return False
-
-            for vol in volatilities:
-                if not self.validate_input(vol, 0.0, 1.0, "Volatility"):
+            # Check the three first inputs
+            if self.validate_size_aversion_riskfree(portfolio_size,risk_aversion_entry,risk_free_rate_entry):
+                
+                volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
+                expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
+                correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
+                
+                if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
+                    messagebox.showerror("Error", "The number of entries must match the portfolio size.")
                     return False
 
-            for ret in expected_returns:
-                if not self.validate_input(ret, -1.0, 1.0, "Expected Return"):
-                    return False
-
-            for row in correlation_rows:
-                correlations = row.split(',')
-                if len(correlations) != portfolio_size:
-                    messagebox.showerror("Error", "The correlation matrix must be square and match the portfolio size.")
-                    return False
-                for corr in correlations:
-                    if not self.validate_input(corr, -1.0, 1.0, "Correlation"):
+                for vol in volatilities:
+                    if not self.validate_input(vol, 0.0, 1.0, "Volatility"):
                         return False
 
-            self.volatilities = list(map(float, volatilities))
-            self.expected_returns = list(map(float, expected_returns))
-            self.correlation_matrix = [list(map(float, row.split(','))) for row in correlation_rows]
+                for ret in expected_returns:
+                    if not self.validate_input(ret, -1.0, 1.0, "Expected Return"):
+                        return False
 
-            return True
+                for row in correlation_rows:
+                    correlations = row.split(',')
+                    if len(correlations) != portfolio_size:
+                        messagebox.showerror("Error", "The correlation matrix must be square and match the portfolio size.")
+                        return False
+                    for corr in correlations:
+                        if not self.validate_input(corr, -1.0, 1.0, "Correlation"):
+                            return False
 
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid input: {e}")
+                self.volatilities = list(map(float, volatilities))
+                self.expected_returns = list(map(float, expected_returns))
+                self.correlation_matrix = [list(map(float, row.split(','))) for row in correlation_rows]
+                return True
+
+        except ValueError:
+            messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
             return False
     
-
+    def generate_portfolio_optimizer(self,expected_returns=[],volatilities=[],correlation_matrix=[]):
+        portfolio_size = int(self.portfolio_size_entry.get())
+        risk_aversion_entry = self.risk_aversion_entry.get()
+        risk_free_rate_entry = self.risk_free_rate_entry.get()
+        optimizer = PortfolioOptimizer(expected_return=expected_returns,  
+                                        volatility=volatilities,     
+                                        corr_matrix=correlation_matrix,    
+                                        risk_free_rate=risk_free_rate_entry,
+                                        portfolio_size=portfolio_size,
+                                        risk_aversion=risk_aversion_entry)
+        return optimizer
+    
     def click_run_optimizer(self):
         if self.process_user_inputs():
             portfolio_size = int(self.portfolio_size_entry.get())
@@ -386,24 +461,26 @@ class PortfolioFrontend:
                                                     risk_aversion=risk_aversion)
             self.run_optimizer() 
         
-    
     def click_run_real_dat(self):
-        portfolio_size = int(self.portfolio_size_entry.get())
-        if self.validate_portfolio_size(portfolio_size):
+        try:
+            portfolio_size = int(self.portfolio_size_entry.get())
             risk_aversion_entry = self.risk_aversion_entry.get()
             risk_free_rate_entry = self.risk_free_rate_entry.get()
-            
-            #TODO Make a message or some vison of averse and rf
-            risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
-            risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
-            self.optimizer = PortfolioOptimizer(expected_return=[],  
-                                                    volatility=[],     
-                                                    corr_matrix=[],    
-                                                    risk_free_rate=risk_free_rate,
-                                                    portfolio_size=portfolio_size,
-                                                    risk_aversion=risk_aversion)
-            self.run_optimizer() 
-            
+            if self.validate_size_aversion_riskfree(portfolio_size,risk_aversion_entry,risk_free_rate_entry):
+                #TODO Make a message or some vison of averse and rf
+                risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
+                risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
+                self.optimizer = PortfolioOptimizer(expected_return=[],  
+                                                        volatility=[],     
+                                                        corr_matrix=[],    
+                                                        risk_free_rate=risk_free_rate,
+                                                        portfolio_size=portfolio_size,
+                                                        risk_aversion=risk_aversion)
+                self.run_optimizer() 
+                
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
+            return False
         
     def run_optimizer(self):
         if self.optimizer is not None:
@@ -419,7 +496,7 @@ class PortfolioFrontend:
         if hasattr(self, 'plot_window') and self.plot_window.winfo_exists():
             self.plot_window.destroy()
 
-        # Create a new plot window
+        # Create a new plot window for aesthetics with exit button 
         self.plot_window = tk.Toplevel(self.root)
         self.plot_window.title("Efficient Frontier")
         width, height = 800, 800
@@ -441,7 +518,7 @@ class PortfolioFrontend:
 
         # Call the backend plot function with the axes
         optimizer.plot_efficient_frontier(ax)
-        
+
         # To show the portfolio metrics when the plot is closed
         def close_plot_and_show_metrics():
             self.plot_window.destroy()
@@ -455,21 +532,22 @@ class PortfolioFrontend:
     
         # Calculate and set the geometry of the dialog based on content size
         rows = len(metrics_dict) + 1  # Including header row
-        cols = 5 
-        top.geometry(f"{cols * 150}x{rows * 150}")  
+        cols = 6 
+        top.geometry(f"{cols * 135}x{rows * 150}")  
         
         formatted_str = ""
 
         try:
-            formatted_str += "{:<15s}{:^15s}{:^15s}{:^15s}{:>15s}\n".format("Portfolio Type", "Return", "Volatility", "Sharpe Ratio", "Utility")
-            formatted_str += "-" * (86) + "\n"
+            formatted_str += "{:<15s}{:^15s}{:^15s}{:^15s}{:^15s}{:^15s}\n".format("Portfolio Type","Portolfio No.", "Return", "Volatility", "Sharpe Ratio", "Utility")
+            formatted_str += "-" * (92) + "\n"
             for key in metrics_dict:
                 formatted_str += "{:<15s}".format(key) 
-                return_value = metrics_dict[key][0]
-                volatility_value = metrics_dict[key][1]
-                sharpe_ratio_value = metrics_dict[key][2]
-                utility_value = metrics_dict[key][3]
-                formatted_str += "{:^15.4f}{:^15.4f}{:^15.4f}{:>15.4f}\n".format(return_value, volatility_value, sharpe_ratio_value, utility_value)
+                portfolio_index=metrics_dict[key][0]
+                return_value = metrics_dict[key][1]
+                volatility_value = metrics_dict[key][2]
+                sharpe_ratio_value = metrics_dict[key][3]
+                utility_value = metrics_dict[key][4]
+                formatted_str += "{:^15.0f}{:^15.4f}{:^15.4f}{:^15.4f}{:^15.4f}\n".format(portfolio_index+1, return_value, volatility_value, sharpe_ratio_value, utility_value)
 
         except Exception as e:
             formatted_str += f"Error occurred when formatting portfolio metrics: {e}\n"
@@ -486,7 +564,7 @@ class PortfolioFrontend:
         # Button to close the window
         ttk.Button(frame, text="Close", command=top.destroy).pack(pady=10)
         
-        # Print to satisfy the assignment requirement
+        # Print to terminal to satisfy the assignment requirement
         print(f'\n{formatted_str}')
 
     def parse_vectors(self, input_str):

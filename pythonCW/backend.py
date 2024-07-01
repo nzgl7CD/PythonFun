@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from openpyxl import load_workbook
 
 class PortfolioOptimizer:
     def __init__(self, expected_return=[0.193,0.1575], volatility=[0.3025], corr_matrix=[[1,0.35],[0.35,1]], risk_free_rate=0.045, portfolio_size=2, risk_aversion=3):
