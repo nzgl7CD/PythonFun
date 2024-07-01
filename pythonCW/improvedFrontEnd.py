@@ -326,7 +326,7 @@ class PortfolioFrontend:
         run_button.grid(column=0, row=0, padx=5, pady=10)
         
         # Run Optimizer Using Real Data 
-        run_button = ttk.Button(button_frame, text="Run: Real Data", command=self.click_run_real_dat, style='TButton')
+        run_button = ttk.Button(button_frame, text="Run: Real Data", command=self.click_run_w_real_data, style='TButton')
         run_button.grid(column=1, row=0, padx=5, pady=10)
         
         # Exit Button to quit program
@@ -363,6 +363,7 @@ class PortfolioFrontend:
         except ValueError:
             messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
     
+    #seperate function used by update and run optimizers
     def validate_size_aversion_riskfree(self, portfolio_size, risk_aversion, risk_free):
         try:
             if portfolio_size < 2 or portfolio_size > 12:
@@ -388,7 +389,7 @@ class PortfolioFrontend:
             messagebox.showerror("Error", f"Invalid input: {e}")
             return False
 
-    def process_user_inputs(self):
+    def process_user_inputs(self, use_user_inputs:bool)->bool:
         try:
             portfolio_size = int(self.portfolio_size_entry.get())
             risk_aversion_entry = self.risk_aversion_entry.get()
@@ -396,86 +397,76 @@ class PortfolioFrontend:
             
             # Check the three first inputs
             if self.validate_size_aversion_riskfree(portfolio_size,risk_aversion_entry,risk_free_rate_entry):
-                
-                volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
-                expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
-                correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
-                
-                if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
-                    messagebox.showerror("Error", "The number of entries must match the portfolio size.")
-                    return False
-
-                for vol in volatilities:
-                    if not self.validate_input(vol, 0.0, 1.0, "Volatility"):
+                if use_user_inputs:
+                    volatilities = self.volatilities_text.get("1.0", tk.END).strip().split(',')
+                    expected_returns = self.expected_returns_text.get("1.0", tk.END).strip().split(',')
+                    correlation_rows = self.correlation_matrix_text.get("1.0", tk.END).strip().split(';')
+                    
+                    if len(volatilities) != portfolio_size or len(expected_returns) != portfolio_size or len(correlation_rows) != portfolio_size:
+                        messagebox.showerror("Error", "The number of entries must match the portfolio size.")
                         return False
 
-                for ret in expected_returns:
-                    if not self.validate_input(ret, -1.0, 1.0, "Expected Return"):
-                        return False
-
-                for row in correlation_rows:
-                    correlations = row.split(',')
-                    if len(correlations) != portfolio_size:
-                        messagebox.showerror("Error", "The correlation matrix must be square and match the portfolio size.")
-                        return False
-                    for corr in correlations:
-                        if not self.validate_input(corr, -1.0, 1.0, "Correlation"):
+                    for vol in volatilities:
+                        if not self.validate_input(vol, 0.0, 1.0, "Volatility"):
                             return False
 
-                self.volatilities = list(map(float, volatilities))
-                self.expected_returns = list(map(float, expected_returns))
-                self.correlation_matrix = [list(map(float, row.split(','))) for row in correlation_rows]
+                    for ret in expected_returns:
+                        if not self.validate_input(ret, -1.0, 1.0, "Expected Return"):
+                            return False
+                        
+                    for row in correlation_rows:
+                        correlations = row.split(',')
+                        if len(correlations) != portfolio_size:
+                            messagebox.showerror("Error", "The correlation matrix must be square and match the portfolio size.")
+                            return False
+                        for corr in correlations:
+                            if not self.validate_input(corr, -1.0, 1.0, "Correlation"):
+                                return False
+
+                    self.volatilities = list(map(float, volatilities))
+                    self.expected_returns = list(map(float, expected_returns))
+                    self.correlation_matrix = [list(map(float, row.split(','))) for row in correlation_rows]
                 return True
 
         except ValueError:
             messagebox.showerror("Error", "Portfolio Size must be a valid integer.")
             return False
     
+    # generates object from backend class with paramteres if click_run_optimizer()
     def generate_portfolio_optimizer(self,expected_returns=[],volatilities=[],correlation_matrix=[]):
         portfolio_size = int(self.portfolio_size_entry.get())
         risk_aversion_entry = self.risk_aversion_entry.get()
         risk_free_rate_entry = self.risk_free_rate_entry.get()
+        risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
+        risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
+        
         optimizer = PortfolioOptimizer(expected_return=expected_returns,  
                                         volatility=volatilities,     
                                         corr_matrix=correlation_matrix,    
-                                        risk_free_rate=risk_free_rate_entry,
+                                        risk_free_rate=risk_free_rate,
                                         portfolio_size=portfolio_size,
-                                        risk_aversion=risk_aversion_entry)
+                                        risk_aversion=risk_aversion)
         return optimizer
     
     def click_run_optimizer(self):
-        if self.process_user_inputs():
-            portfolio_size = int(self.portfolio_size_entry.get())
-            risk_aversion_entry = self.risk_aversion_entry.get()
-            risk_free_rate_entry = self.risk_free_rate_entry.get()
-            volatilities = self.parse_vectors(self.volatilities_text.get("1.0", tk.END))
-            expected_returns = self.parse_vectors(self.expected_returns_text.get("1.0", tk.END))
-            correlation_matrix = self.parse_correlation_matrix(self.correlation_matrix_text.get("1.0", tk.END))
-            risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
-            risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
-            self.optimizer = PortfolioOptimizer(expected_return=expected_returns,
-                                                    volatility=volatilities,
-                                                    corr_matrix=correlation_matrix,
-                                                    risk_free_rate=risk_free_rate,
-                                                    portfolio_size=portfolio_size,
-                                                    risk_aversion=risk_aversion)
-            self.run_optimizer() 
-        
-    def click_run_real_dat(self):
         try:
-            portfolio_size = int(self.portfolio_size_entry.get())
-            risk_aversion_entry = self.risk_aversion_entry.get()
-            risk_free_rate_entry = self.risk_free_rate_entry.get()
-            if self.validate_size_aversion_riskfree(portfolio_size,risk_aversion_entry,risk_free_rate_entry):
-                #TODO Make a message or some vison of averse and rf
-                risk_aversion = float(risk_aversion_entry) if risk_aversion_entry else 3.0
-                risk_free_rate = float(risk_free_rate_entry) if risk_free_rate_entry else 0.045
-                self.optimizer = PortfolioOptimizer(expected_return=[],  
-                                                        volatility=[],     
-                                                        corr_matrix=[],    
-                                                        risk_free_rate=risk_free_rate,
-                                                        portfolio_size=portfolio_size,
-                                                        risk_aversion=risk_aversion)
+            if self.process_user_inputs(True):
+                volatilities = self.parse_vectors(self.volatilities_text.get("1.0", tk.END))
+                expected_returns = self.parse_vectors(self.expected_returns_text.get("1.0", tk.END))
+                correlation_matrix = self.parse_correlation_matrix(self.correlation_matrix_text.get("1.0", tk.END))
+                
+                self.optimizer=self.generate_portfolio_optimizer(expected_returns,volatilities,correlation_matrix)
+                
+                self.run_optimizer() 
+                
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
+            return False
+        
+    def click_run_w_real_data(self):
+        try:
+            if self.process_user_inputs(False):
+                self.optimizer=self.generate_portfolio_optimizer()
                 self.run_optimizer() 
                 
         except ValueError as e:
@@ -535,7 +526,7 @@ class PortfolioFrontend:
         cols = 6 
         top.geometry(f"{cols * 135}x{rows * 150}")  
         
-        formatted_str = ""
+        formatted_str = "" 
 
         try:
             formatted_str += "{:<15s}{:^15s}{:^15s}{:^15s}{:^15s}{:^15s}\n".format("Portfolio Type","Portolfio No.", "Return", "Volatility", "Sharpe Ratio", "Utility")
@@ -567,13 +558,15 @@ class PortfolioFrontend:
         # Print to terminal to satisfy the assignment requirement
         print(f'\n{formatted_str}')
 
+    # Used to strip vecror values for expected return and volatility
     def parse_vectors(self, input_str):
         try:
             values = list(map(float, input_str.strip().split(',')))
             return values
         except ValueError as e:
             raise ValueError(f"Invalid input: {e}")
-
+        
+    #used to strip both vectors and their values in corr matrix
     def parse_correlation_matrix(self, input_str):
         try:
             rows = input_str.strip().split(';')
